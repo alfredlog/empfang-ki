@@ -1,0 +1,3 @@
+html, body { height: 100%; margin: 0; background: #f6f7f5; font-family: system-ui, sans-serif; }
+#empfang-ki { height: 100%; }
+.status { display: grid; place-items: center; height: 100%; color: #4a5868; }
