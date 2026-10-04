@@ -315,3 +315,25 @@ test('Abrechnung: Testphase, manuell bezahlt, Ein/Aus und Stripe-Webhook', opts,
     await query('DELETE FROM tenants WHERE id = $1', [t.id]);
   }
 });
+
+test('Übersicht und Monatsbericht-Vorschau', opts, async () => {
+  const t = await (await fetch(`${base}/api/admin/tenants`, {
+    method: 'POST', headers: admin, body: JSON.stringify({ name: `Bericht Test ${Date.now()}`, industry: 'handwerk', contactEmail: 'chef@bericht-test.de' }),
+  })).json();
+  try {
+    const key = t.public_key;
+    await chat({ key, message: 'Wann habt ihr offen?' });
+    await chat({ key, message: 'wann habt ihr offen' });
+    const s = await (await fetch(`${base}/api/admin/tenants/${t.id}/insights`, { headers: admin })).json();
+    assert.equal(s.conversations, 2);
+    assert.equal(s.topQuestions[0].count, 2);
+    const month = s.month;
+    const r = await (await fetch(`${base}/api/admin/tenants/${t.id}/report/preview?month=${month}`, { headers: admin })).json();
+    assert.match(r.subject, /Monatsbericht/);
+    assert.match(r.html, /2<\/div><div[^>]*>Gespräche/);
+    const sent = await (await fetch(`${base}/api/admin/tenants/${t.id}/report/send`, { method: 'POST', headers: admin, body: JSON.stringify({ month }) })).json();
+    assert.equal(sent.sent, false); // ohne SMTP im Test: nur Log, kein Versand
+  } finally {
+    await query('DELETE FROM tenants WHERE id = $1', [t.id]);
+  }
+});

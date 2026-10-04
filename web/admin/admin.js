@@ -19,7 +19,7 @@
   const IS_ADMIN = MODE === 'admin';
   const API_BASE = IS_ADMIN ? '/api/admin' : '/api/portal';
   let token = IS_ADMIN ? store.get('ek_admin_token') : null;
-  const state = { tenants: [], industries: [], plans: {}, current: null, tab: 'einbau', me: null };
+  const state = { tenants: [], industries: [], plans: {}, current: null, tab: 'uebersicht', me: null };
   /** Pfad zu einem Kunden: Admin über die ID, Kunde immer nur der eigene Betrieb. */
   const T = (t) => (IS_ADMIN ? `/tenants/${typeof t === 'string' ? t : t.id}` : '/tenant');
 
@@ -293,7 +293,7 @@
 
   // ------------------------------------------------------------ Kundenansicht
   const TABS = [
-    ['einbau', 'Einbau'], ['wissen', 'Wissen'], ['anfragen', 'Anfragen'], ['fragen', 'Offene Fragen'],
+    ['uebersicht', 'Übersicht'], ['einbau', 'Einbau'], ['wissen', 'Wissen'], ['anfragen', 'Anfragen'], ['fragen', 'Offene Fragen'],
     ['gespraeche', 'Gespräche'], ['einstellungen', 'Einstellungen'], ['abrechnung', 'Abrechnung'],
     ...(IS_ADMIN ? [['zugaenge', 'Zugänge']] : []),
   ];
@@ -302,8 +302,8 @@
     try {
       state.current = await api(T(id));
     } catch (err) { toast(err.message, true); return; }
-    state.tab = tab || (state.current?.id === id ? state.tab : 'einbau');
-    if (!TABS.some(([k]) => k === state.tab)) state.tab = 'einbau';
+    state.tab = tab || (state.current?.id === id ? state.tab : 'uebersicht');
+    if (!TABS.some(([k]) => k === state.tab)) state.tab = 'uebersicht';
     renderTenantList();
     renderTenant();
   }
@@ -348,7 +348,72 @@
       window.EmpfangKI.use(t.public_key, { open: true });
     });
     const body = $('#tab-body');
-    ({ einbau: tabEinbau, wissen: tabWissen, anfragen: tabAnfragen, fragen: tabFragen, gespraeche: tabGespraeche, einstellungen: tabEinstellungen, abrechnung: tabAbrechnung, zugaenge: tabZugaenge })[state.tab](body, t);
+    ({ einbau: tabEinbau, wissen: tabWissen, anfragen: tabAnfragen, fragen: tabFragen, gespraeche: tabGespraeche, einstellungen: tabEinstellungen, abrechnung: tabAbrechnung, zugaenge: tabZugaenge, uebersicht: tabUebersicht })[state.tab](body, t);
+  }
+
+  // --- Übersicht: Zahlen des Monats, Anfragen, häufigste Fragen (+ Monatsbericht im Admin)
+  function monthOptions() {
+    const out = [];
+    const d = new Date();
+    for (let i = 0; i < 6; i++) {
+      const x = new Date(d.getFullYear(), d.getMonth() - i, 1);
+      const key = `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}`;
+      out.push([key, new Intl.DateTimeFormat('de-DE', { month: 'long', year: 'numeric' }).format(x)]);
+    }
+    return out;
+  }
+
+  async function tabUebersicht(body, t, month) {
+    body.innerHTML = '<div class="progress"><span class="spinner"></span>Lade Übersicht …</div>';
+    let s;
+    try { s = await api(T(t) + `/insights${month ? `?month=${month}` : ''}`); } catch (err) { body.innerHTML = `<div class="error">${esc(err.message)}</div>`; return; }
+    const pct = s.limit ? Math.min(100, Math.round((s.conversations / s.limit) * 100)) : 0;
+    body.innerHTML = `
+      <div class="panel-head" style="margin-bottom:14px">
+        <h2 style="margin:0;font-size:20px">${esc(s.label)}</h2>
+        <select id="o-month" style="width:auto" aria-label="Monat wählen">${monthOptions().map(([k, l]) => `<option value="${k}" ${k === s.month ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>
+      </div>
+      <div class="tiles">
+        <div class="tile"><b>${fmtNum(s.conversations)}</b><span>Gespräche${s.limit ? ` von ${fmtNum(s.limit)}` : ''}</span>${s.limit ? `<div class="meter"><i style="width:${pct}%"></i></div>` : ''}</div>
+        <div class="tile"><b>${fmtNum(s.answers)}</b><span>Antworten gegeben</span></div>
+        <div class="tile"><b>${fmtNum(s.leads.total)}</b><span>Anfragen weitergeleitet</span></div>
+        <div class="tile ${s.openQuestions.pending ? 'tile-warn' : ''}"><b>${fmtNum(s.openQuestions.pending)}</b><span>offene Fragen</span>${s.openQuestions.pending ? '<button class="link-btn" type="button" data-goto="fragen">Jetzt beantworten</button>' : ''}</div>
+      </div>
+      <div class="grid-2" style="gap:18px;margin-top:18px;align-items:start">
+        <div class="panel" style="margin:0">
+          <h2>Häufigste Fragen</h2>
+          <p class="hint">Womit Gespräche begonnen haben. Gespräche werden nach 30 Tagen gelöscht, ältere Monate sind daher unvollständig.</p>
+          ${s.topQuestions.length ? `<ol class="top-list">${s.topQuestions.map((q) => `<li><span>${esc(q.question)}</span><b>${q.count}×</b></li>`).join('')}</ol>` : '<p class="hint">Noch keine Gespräche in diesem Monat.</p>'}
+        </div>
+        <div class="panel" style="margin:0">
+          <h2>Anfragen nach Art</h2>
+          ${s.leads.byKind.length ? `<ul class="top-list plain">${s.leads.byKind.map((k) => `<li><span>${esc(k.label)}</span><b>${k.count}</b></li>`).join('')}</ul>
+            <button class="link-btn" type="button" data-goto="anfragen" style="margin-top:8px">Alle Anfragen ansehen</button>` : '<p class="hint">Noch keine Anfragen in diesem Monat.</p>'}
+        </div>
+      </div>
+      ${IS_ADMIN ? `
+      <div class="panel" style="margin-top:18px">
+        <div class="panel-head"><h2>Monatsbericht</h2><span class="hint">Wird automatisch am 1. jedes Monats um 8 Uhr an den Kunden geschickt.</span></div>
+        <div class="copy-row">
+          <button class="btn btn-secondary" type="button" id="r-preview">Vorschau ${esc(s.label)}</button>
+          <button class="btn btn-secondary" type="button" id="r-send">Jetzt an den Kunden senden</button>
+        </div>
+        <div id="r-out"></div>
+      </div>` : ''}`;
+    $('#o-month').addEventListener('change', (e) => tabUebersicht(body, t, e.target.value));
+    body.querySelectorAll('[data-goto]').forEach((b) => b.addEventListener('click', () => { state.tab = b.dataset.goto; renderTenant(); }));
+    $('#r-preview')?.addEventListener('click', (e) => busy(e.currentTarget, async () => {
+      const r = await api(T(t) + `/report/preview?month=${s.month}`);
+      $('#r-out').innerHTML = `<p class="hint" style="margin-top:12px">Betreff: <strong>${esc(r.subject)}</strong></p><iframe class="report-frame" title="Vorschau Monatsbericht"></iframe>`;
+      $('#r-out iframe').srcdoc = r.html;
+    }));
+    $('#r-send')?.addEventListener('click', (e) => {
+      if (!confirm(`Monatsbericht für ${s.label} jetzt an den Kunden senden?`)) return;
+      busy(e.currentTarget, async () => {
+        const r = await api(T(t) + '/report/send', { method: 'POST', body: { month: s.month } });
+        toast(r.sent ? `Bericht gesendet an ${r.to.join(', ')} ✓` : r.skipped === 'no_recipients' ? 'Keine Empfänger: E-Mail für Anfragen oder Zugang fehlt.' : 'E-Mail konnte nicht gesendet werden (SMTP prüfen).', !r.sent);
+      });
+    });
   }
 
   // --- Einbau

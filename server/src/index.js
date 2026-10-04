@@ -5,6 +5,7 @@ import { pool } from './db/pool.js';
 import { purgeExpiredAuth } from './services/auth.js';
 import { expireTrials } from './services/billing.js';
 import { purgeOldConversations } from './services/chat.js';
+import { runMonthlyReports } from './services/insights.js';
 
 await migrate();
 
@@ -21,6 +22,8 @@ const purge = async () => {
     await purgeExpiredAuth();
     const expired = await expireTrials();
     if (expired) console.log(`[billing] ${expired} Testphase(n) abgelaufen – Assistent ausgeschaltet`);
+    const reports = await runMonthlyReports();
+    if (reports) console.log(`[report] ${reports} Monatsbericht(e) verschickt`);
   } catch (err) {
     console.error('[retention]', err.message);
   }

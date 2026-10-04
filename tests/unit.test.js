@@ -88,3 +88,18 @@ test('requestOrigin: gleiche Domain ohne Origin-Header wird erkannt', async () =
   assert.equal(requestOrigin({ headers: { referer: 'https://kunde.de/kontakt?x=1' } }), 'https://kunde.de');
   assert.equal(requestOrigin({ headers: {} }), null);
 });
+
+test('Statistik: gleiche Fragen werden zusammengefasst, Monatsgrenzen stimmen', async () => {
+  const { topQuestions, monthRange, previousMonthKey } = await import('../server/src/services/insights.js');
+  const top = topQuestions(['Wann habt ihr offen?', 'wann habt ihr offen', 'Was kostet ein Anstrich?', 'Wann habt ihr OFFEN!!']);
+  assert.equal(top[0].count, 3);
+  assert.equal(top[1].count, 1);
+  assert.deepEqual(monthRange('2026-12'), { start: '2026-12-01', end: '2027-01-01', label: 'Dezember 2026', key: '2026-12' });
+  assert.equal(previousMonthKey(new Date('2026-01-15T12:00:00Z')), '2025-12');
+});
+
+test('Monatsbericht wird nur am 1. ab 8 Uhr verschickt', async () => {
+  const { runMonthlyReports } = await import('../server/src/services/insights.js');
+  assert.equal(await runMonthlyReports(new Date('2026-10-15T10:00:00+02:00')), 0);
+  assert.equal(await runMonthlyReports(new Date('2026-10-01T06:00:00+02:00')), 0);
+});

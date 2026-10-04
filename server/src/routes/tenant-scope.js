@@ -12,6 +12,7 @@ import {
   billingEvents, billingSummary, createCheckout, createPortalSession, markPaidManually, setActiveManually, setTrial,
 } from '../services/billing.js';
 import { extractPdfText, importWebsite, normalizeUrl } from '../services/importers.js';
+import { buildMonthlyReport, getInsights, previousMonthKey, sendMonthlyReport } from '../services/insights.js';
 import {
   addKnowledgeEntry, deleteChunk, deleteSource, knowledgeStats, listSources, replaceKnowledge,
 } from '../services/knowledge.js';
@@ -98,6 +99,28 @@ export function buildTenantRouter({ role }) {
     if (!isAdmin) { delete t.stripe_customer_id; delete t.stripe_subscription_id; }
     res.json(t);
   }));
+
+  // ------------------------------------------------------------ Statistik & Monatsbericht
+  const monthParam = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional();
+
+  r.get('/insights', asyncRoute(async (req, res) => {
+    const month = monthParam.parse(req.query.month);
+    res.json(await getInsights(req.tenantId, month));
+  }));
+
+  if (isAdmin) {
+    r.get('/report/preview', asyncRoute(async (req, res) => {
+      const month = monthParam.parse(req.query.month) || previousMonthKey();
+      const report = await buildMonthlyReport(req.tenantId, month);
+      if (!report) return res.status(404).json({ error: 'not_found' });
+      res.json({ subject: report.subject, html: report.html, month });
+    }));
+
+    r.post('/report/send', asyncRoute(async (req, res) => {
+      const month = monthParam.parse(req.body?.month) || previousMonthKey();
+      res.json(await sendMonthlyReport(req.tenantId, month, { force: true }));
+    }));
+  }
 
   // ------------------------------------------------------------ Abrechnung
   r.get('/billing', asyncRoute(async (req, res) => {

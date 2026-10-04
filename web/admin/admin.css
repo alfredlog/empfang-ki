@@ -178,3 +178,19 @@ code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; b
 
 .qr-row { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
 .qr { border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+
+/* Übersicht */
+.tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.tile { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; display: grid; gap: 2px; align-content: start; }
+.tile b { font-size: 30px; letter-spacing: -0.02em; line-height: 1.1; }
+.tile span { font-size: 13.5px; color: var(--muted); }
+.tile .meter { width: 100%; }
+.tile-warn { background: var(--warn-soft); border-color: #ecd9a8; }
+.tile .link-btn { justify-self: start; font-size: 13.5px; margin-top: 4px; }
+.top-list { margin: 10px 0 0; padding-left: 22px; display: grid; gap: 8px; }
+.top-list.plain { list-style: none; padding-left: 0; }
+.top-list li { display: flex; justify-content: space-between; gap: 12px; }
+.top-list li span { min-width: 0; overflow-wrap: anywhere; }
+.top-list li b { white-space: nowrap; color: var(--petrol-dark); }
+.report-frame { width: 100%; height: 560px; border: 1px solid var(--line); border-radius: 10px; background: #fff; margin-top: 8px; }
+@media (max-width: 860px) { .tiles { grid-template-columns: 1fr 1fr; } }
