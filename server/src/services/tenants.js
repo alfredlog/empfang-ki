@@ -2,10 +2,11 @@ import crypto from 'node:crypto';
 import { query } from '../db/pool.js';
 import { getIndustry } from '../templates/industries.js';
 
+// Gründerpreise für die ersten Kunden (später: 49 / 99 / 179 €)
 export const PLANS = {
-  starter: { label: 'Starter', priceEur: 49, monthlyConversations: 300 },
-  business: { label: 'Business', priceEur: 99, monthlyConversations: 1000 },
-  pro: { label: 'Pro', priceEur: 179, monthlyConversations: 2500 },
+  starter: { label: 'Starter', priceEur: 29, monthlyConversations: 200 },
+  business: { label: 'Business', priceEur: 59, monthlyConversations: 600 },
+  pro: { label: 'Pro', priceEur: 99, monthlyConversations: 1500 },
   demo: { label: 'Demo', priceEur: 0, monthlyConversations: 5000 },
 };
 

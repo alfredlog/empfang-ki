@@ -24,14 +24,16 @@ export function createApp() {
         directives: {
           defaultSrc: ["'self'"],
           scriptSrc: ["'self'"],
-          styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
-          fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          fontSrc: ["'self'"],
           imgSrc: ["'self'", 'data:'],
           connectSrc: ["'self'"],
         },
       },
     }),
   );
+  // Admin-API zuerst einbinden: braucht ein höheres Limit für PDF-Uploads
+  app.use('/api/admin', express.json({ limit: '30mb' }), adminRouter);
   app.use(express.json({ limit: '1mb' }));
 
   app.get('/healthz', async (req, res) => {
@@ -44,7 +46,6 @@ export function createApp() {
   });
 
   app.use('/api/v1', publicRouter);
-  app.use('/api/admin', adminRouter);
 
   // Das einbettbare Widget
   app.get('/widget.js', (req, res) => {

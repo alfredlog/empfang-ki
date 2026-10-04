@@ -51,7 +51,7 @@ a:hover { color: var(--petrol-dark); }
 .lead { font-size: 20px; line-height: 1.5; color: var(--ink-soft); max-width: 40ch; margin: 0 0 32px; }
 .cities { font-size: 15px; color: var(--ink-soft); margin-top: 28px; }
 
-.btn { display: inline-flex; align-items: center; gap: 8px; padding: 14px 22px; border-radius: var(--radius); font: 600 16px/1 inherit; font-family: inherit; text-decoration: none; border: 2px solid transparent; cursor: pointer; }
+.btn { display: inline-flex; align-items: center; gap: 8px; padding: 14px 22px; border-radius: var(--radius); font-weight:600;font-size:16px;line-height:1;font-family:inherit; text-decoration: none; border: 2px solid transparent; cursor: pointer; }
 .btn-primary { background: var(--petrol); color: #fff; }
 .btn-primary:hover { background: var(--petrol-dark); color: #fff; }
 .btn-ghost { border-color: var(--ink); color: var(--ink); background: transparent; }

@@ -12,6 +12,7 @@ Live-Demo: **https://chatbot.pdf-libre.de**
 - **Anfragen per Tool-Use**: Claude ruft `anfrage_erstellen` auf, sobald Name, Kontakt und Anliegen bestätigt sind. Die Anfrage wird gespeichert und per E-Mail an den Betrieb geschickt.
 - **Offene Fragen und Wissenslücken**: Kann der Assistent etwas nicht beantworten, nimmt er die Kontaktdaten auf und speichert die unbeantwortete Frage. Der Betrieb ruft zurück und kann die Antwort ergänzen.
 - **Branchen-Vorlagen**: Aufgaben, Grenzen und Ton pro Branche, z. B. keine medizinische oder rechtliche Beratung, Notfall-Hinweise (112, 116 117) per deterministischer Erkennung vor dem LLM.
+- **Admin-Oberfläche** `/admin`: Kunden anlegen, Website- und PDF-Import, Code-Zeile kopieren, Anfragen und offene Fragen bearbeiten, Bot testen.
 - **Gehostete Chat-Seite** `/c/<slug>` für Betriebe ohne Website (Link/QR-Code).
 - **Datensparsamkeit**: automatische Löschung von Gesprächen nach `RETENTION_DAYS`, Origin-Prüfung, Rate-Limits, Paket-Limits pro Monat.
 - **Austauschbares LLM**: Anthropic Claude (Standard: Haiku 4.5) oder ein Mock-Modus für Entwicklung ohne API-Key.
@@ -42,9 +43,10 @@ server/src/
   services/knowledge.js     Chunking, Speicherung, Retrieval
   services/llm.js           Anthropic-Streaming + Mock
   services/mailer.js        Benachrichtigung per SMTP
+  services/importers.js     Website-Crawler und PDF-Text-Extraktion
   templates/industries.js   Branchen-Vorlagen und Systemprompt
 widget/widget.js            Einbettbares Chat-Widget
-web/                        Landing-Page, Demo-Websites, gehostete Chat-Seite
+web/                        Landing-Page, Admin-Oberfläche, Demo-Websites, gehostete Chat-Seite
 tests/                      Unit- und Integrationstests (node:test)
 ```
 
@@ -86,27 +88,21 @@ docker compose exec app node server/src/scripts/seed.js   # Demo-Betriebe einspi
 
 Danach den Reverse-Proxy einrichten: `infra/Caddyfile.example` (Caddy) oder `infra/nginx.example.conf` (nginx), und einen DNS-A-Record für die Subdomain auf die Server-IP setzen.
 
-## Neuen Kunden anlegen
+## Neuen Kunden anlegen (Admin-Oberfläche)
 
-```bash
-curl -X POST https://chatbot.pdf-libre.de/api/admin/tenants \
-  -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" \
-  -d '{"name":"Malerei Beispiel","slug":"malerei-beispiel","industry":"handwerk","city":"Darmstadt",
-       "contactEmail":"info@malerei-beispiel.de","plan":"business","allowedOrigins":["malerei-beispiel.de"]}'
+Unter **`/admin`** mit dem `ADMIN_TOKEN` anmelden:
 
-curl -X PUT https://chatbot.pdf-libre.de/api/admin/tenants/<id>/knowledge \
-  -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" \
-  -d '{"text":"# Öffnungszeiten\nMo–Fr 7–16 Uhr\n\n# Leistungen\n..."}'
-```
+1. **Neuer Kunde** → Name, Branche, Website, E-Mail für Anfragen, Paket → „Kunde anlegen“
+2. Die Website wird automatisch eingelesen (bis zu 12 Seiten, mit Claude zu einer sauberen Wissensbasis zusammengefasst). Zusätzlich lassen sich **PDFs hochladen** und **eigener Text** ergänzen.
+3. Im Tab **Einbau** die Code-Zeile kopieren und dem Kunden geben (Anleitungen für WordPress, Jimdo, Wix stehen dabei). Die Domain der Website ist automatisch freigeschaltet.
+4. Mit **Chat testen** den Assistenten direkt im Admin ausprobieren.
+5. **Anfragen** und **Offene Fragen** bearbeiten. Mit „Antwort hinzufügen“ lernt der Assistent fehlende Antworten dazu.
 
-Der Kunde bekommt dann die Zeile `<script src="https://chatbot.pdf-libre.de/widget.js" data-bot-id="pk_…" defer></script>`.
-
-Branchen: `handwerk`, `hausverwaltung`, `kosmetik`, `autovermietung`, `arztpraxis`, `kanzlei`, `allgemein`.
+Die Admin-API (`/api/admin/*`, Bearer-Token) kann auch direkt genutzt werden, siehe `server/src/routes/admin.js`.
 
 ## Roadmap
 
-- Kunden-Dashboard (Login, Anfragen, offene Fragen mit „Antwort hinzufügen“, Gespräche, Einstellungen)
-- Wissensbasis automatisch aus der Website des Kunden und aus PDFs einlesen
+- Eigener Login für Kunden (eigene Anfragen und offene Fragen sehen)
 - Stripe-Abos für die Pakete
 - Benachrichtigung zusätzlich per SMS/WhatsApp
 - Optional semantische Suche mit Embeddings (pgvector)

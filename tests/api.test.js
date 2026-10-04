@@ -103,3 +103,52 @@ test('zu lange Nachrichten werden abgelehnt', opts, async () => {
   const r = await chat({ key, message: 'x'.repeat(5000) }, 'https://testbetrieb.de');
   assert.ok(r.events.some((e) => e.ev === 'error' && e.data.code === 'too_long'));
 });
+
+// ---------------------------------------------------------------- Admin-Oberfläche: Import & FAQ
+let adminTenant;
+
+test('Kunde ohne Slug anlegen: Slug, Domain und Code-Zeile werden erzeugt', opts, async () => {
+  const res = await fetch(`${base}/api/admin/tenants`, {
+    method: 'POST', headers: admin,
+    body: JSON.stringify({ name: `Malerei Müller ${Date.now()}`, industry: 'handwerk', website: 'www.malerei-mueller-test.de', contactEmail: '' }),
+  });
+  assert.equal(res.status, 201);
+  adminTenant = await res.json();
+  assert.match(adminTenant.slug, /^malerei-mueller-/);
+  assert.ok(adminTenant.allowed_origins.includes('https://malerei-mueller-test.de'));
+  assert.match(adminTenant.snippet, /data-bot-id="pk_/);
+});
+
+test('PDF-Import liest den Text ein', opts, async () => {
+  const { readFile } = await import('node:fs/promises');
+  const dataBase64 = (await readFile(new URL('./fixtures/preisliste.pdf', import.meta.url))).toString('base64');
+  const res = await fetch(`${base}/api/admin/tenants/${adminTenant.id}/import/pdf`, {
+    method: 'POST', headers: admin, body: JSON.stringify({ filename: 'Preisliste 2026.pdf', dataBase64 }),
+  });
+  const r = await res.json();
+  assert.equal(res.status, 200, JSON.stringify(r));
+  assert.equal(r.pages, 2);
+  assert.match(r.preview, /11 Euro pro Quadratmeter/);
+});
+
+test('Website-Import liest Seiten der eigenen Demo-Website', opts, async () => {
+  process.env.IMPORT_ALLOW_PRIVATE = '1';
+  const res = await fetch(`${base}/api/admin/tenants/${adminTenant.id}/import/website`, {
+    method: 'POST', headers: admin, body: JSON.stringify({ url: `${base}/demo/farbwerk`, maxPages: 2 }),
+  });
+  const r = await res.json();
+  assert.equal(res.status, 200, JSON.stringify(r));
+  assert.ok(r.pages.length >= 1);
+  assert.match(r.preview, /Malerarbeiten in Darmstadt/);
+});
+
+test('FAQ-Antwort ergänzt das Wissen und erscheint in den Quellen', opts, async () => {
+  const res = await fetch(`${base}/api/admin/tenants/${adminTenant.id}/faq`, {
+    method: 'POST', headers: admin, body: JSON.stringify({ question: 'Lackiert ihr Metallzäune?', answer: 'Ja, ab 25 € pro laufendem Meter.' }),
+  });
+  assert.equal(res.status, 201);
+  const t = await (await fetch(`${base}/api/admin/tenants/${adminTenant.id}`, { headers: admin })).json();
+  const sources = t.sources.map((s) => s.source);
+  assert.ok(sources.includes('faq') && sources.includes('website') && sources.includes('pdf:Preisliste 2026.pdf'), sources.join());
+  await query('DELETE FROM tenants WHERE id = $1', [adminTenant.id]);
+});

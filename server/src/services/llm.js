@@ -112,6 +112,21 @@ async function emit(text, onText) {
   return { content: [{ type: 'text', text }], stopReason: 'end_turn', usage: { input: 0, output: 0, cacheRead: 0 } };
 }
 
+/**
+ * Einfache Text-Vervollständigung ohne Streaming (z. B. Website-Inhalte zusammenfassen).
+ * Gibt im Mock-Modus null zurück – dann wird der Rohtext verwendet.
+ */
+export async function completeText({ system, prompt, maxTokens = 4000 }) {
+  if (config.llm.provider !== 'anthropic') return null;
+  const msg = await anthropic().messages.create({
+    model: config.llm.model,
+    max_tokens: maxTokens,
+    system,
+    messages: [{ role: 'user', content: prompt }],
+  });
+  return msg.content.filter((b) => b.type === 'text').map((b) => b.text).join('').trim();
+}
+
 export function streamCompletion(args) {
   return config.llm.provider === 'anthropic' ? anthropicCompletion(args) : mockCompletion(args);
 }

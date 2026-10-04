@@ -131,3 +131,35 @@ export async function retrieveContext(tenantId, question) {
 export function formatChunks(rows) {
   return rows.map((r) => `## ${r.title}\n${r.content}`).join('\n\n');
 }
+
+/** Fügt einen einzelnen Wissensabschnitt hinzu (z. B. eine FAQ-Antwort), ohne andere zu löschen. */
+export async function addKnowledgeEntry(tenantId, { source = 'faq', title, content }) {
+  const { rows } = await query(
+    `INSERT INTO knowledge_chunks (tenant_id, source, title, content, tokens, position)
+     VALUES ($1, $2, $3, $4, $5,
+       (SELECT coalesce(max(position), -1) + 1 FROM knowledge_chunks WHERE tenant_id = $1 AND source = $2))
+     RETURNING id`,
+    [tenantId, source, title, content, estimateTokens(title + content)],
+  );
+  return rows[0].id;
+}
+
+/** Übersicht der Wissensquellen eines Kunden (manuell, Website, PDFs, FAQ). */
+export async function listSources(tenantId) {
+  const { rows } = await query(
+    `SELECT source, count(*)::int AS chunks, sum(tokens)::int AS tokens, max(created_at) AS updated_at
+       FROM knowledge_chunks WHERE tenant_id = $1 GROUP BY source ORDER BY min(created_at)`,
+    [tenantId],
+  );
+  return rows;
+}
+
+export async function deleteSource(tenantId, source) {
+  const { rowCount } = await query('DELETE FROM knowledge_chunks WHERE tenant_id = $1 AND source = $2', [tenantId, source]);
+  return rowCount;
+}
+
+export async function deleteChunk(tenantId, chunkId) {
+  const { rowCount } = await query('DELETE FROM knowledge_chunks WHERE tenant_id = $1 AND id = $2', [tenantId, chunkId]);
+  return rowCount;
+}

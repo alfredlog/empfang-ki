@@ -1,6 +1,7 @@
 // Legt die Demo-Betriebe an (idempotent – kann beliebig oft ausgeführt werden).
 // Alle Muster-Betriebe sind frei erfunden. "Autovermietung Prinz" nutzt nur öffentlich
 // auf der Website stehende Angaben und verschickt in der Demo keine E-Mails.
+import { config } from '../config.js';
 import { migrate } from '../db/migrate.js';
 import { pool, query } from '../db/pool.js';
 import { replaceKnowledge } from '../services/knowledge.js';
@@ -28,10 +29,11 @@ Empfang KI ist ein KI-Assistent für die Website kleiner Betriebe in Darmstadt, 
 Handwerk, Hausverwaltungen, Kosmetik- und Friseurstudios, Autovermietungen und Werkstätten, Arztpraxen, Kanzleien und Steuerberatungen sowie andere kleine Betriebe. Jede Branche hat eine eigene Vorlage mit passenden Fragen und Regeln.
 
 # Preise
-Starter: 49 € pro Monat, bis 300 Gespräche, Antworten aus den Infos des Betriebs, Anfragen per E-Mail.
-Business: 99 € pro Monat, bis 1.000 Gespräche, zusätzlich Dashboard, offene Fragen/Wissenslücken, eigene Farben und Begrüßung.
-Pro: 179 € pro Monat, bis 2.500 Gespräche, mehrere Standorte, persönliche Einrichtung und Pflege.
-Einrichtung einmalig 199 €. Für die ersten Betriebe aus der Region ist der erste Monat kostenlos. Monatlich kündbar. Alle Preise zzgl. gesetzlicher MwSt., falls anfallend.
+Gründerpreise für die ersten zehn Betriebe aus der Region, garantiert für zwölf Monate, ohne Einrichtungsgebühr:
+Starter: 29 € pro Monat (später 49 €), bis 200 Gespräche, Antworten aus den Infos des Betriebs, Anfragen per E-Mail.
+Business: 59 € pro Monat (später 99 €), bis 600 Gespräche, zusätzlich Übersicht aller Anfragen, offene Fragen/Wissenslücken, eigene Farben und Begrüßung.
+Pro: 99 € pro Monat (später 179 €), bis 1.500 Gespräche, mehrere Standorte, persönliche Einrichtung und Pflege.
+Monatlich kündbar.
 
 # Einbau
 Der Betrieb gibt seine Infos (Website, Preisliste, Stichpunkte). Danach wird eine Zeile Code in die Website eingefügt; das funktioniert mit WordPress, Jimdo, Wix und allen anderen Websites. Die Einrichtung übernehmen wir auf Wunsch. Betriebe ohne Website bekommen eine eigene Chat-Seite mit Link und QR-Code.
@@ -200,7 +202,8 @@ for (const d of demos) {
        public_key = EXCLUDED.public_key, name = EXCLUDED.name, industry = EXCLUDED.industry, city = EXCLUDED.city,
        website = EXCLUDED.website, phone = EXCLUDED.phone, allowed_origins = EXCLUDED.allowed_origins, settings = EXCLUDED.settings
      RETURNING id`,
-    [d.publicKey, d.slug, d.name, d.industry, d.city, d.website || null, d.phone, normalizeOrigins(d.allowedOrigins || []), d.settings],
+    [d.publicKey, d.slug, d.name, d.industry, d.city, d.website || null, d.phone, normalizeOrigins(d.allowedOrigins || []),
+      { privacyUrl: `${config.publicUrl}/datenschutz`, ...d.settings }],
   );
   const chunks = await replaceKnowledge(rows[0].id, { source: 'manual', title: 'Allgemein', text: d.knowledge });
   console.log(`✓ ${d.name} (${d.publicKey}) – ${chunks} Wissensabschnitte`);

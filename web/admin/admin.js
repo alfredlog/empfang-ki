@@ -1,0 +1,611 @@
+// Admin-Oberfläche: Kunden anlegen, Wissen importieren, Anfragen bearbeiten, Bot testen.
+(() => {
+  'use strict';
+
+  // ------------------------------------------------------------ Helfer
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  const fmtDate = (d) => new Intl.DateTimeFormat('de-DE', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(d));
+  const fmtNum = (n) => new Intl.NumberFormat('de-DE').format(n || 0);
+
+  const store = {
+    get(k) { try { return sessionStorage.getItem(k); } catch { return null; } },
+    set(k, v) { try { sessionStorage.setItem(k, v); } catch { /* privat-Modus */ } },
+    del(k) { try { sessionStorage.removeItem(k); } catch { /* privat-Modus */ } },
+  };
+
+  let token = store.get('ek_admin_token');
+  const state = { tenants: [], industries: [], plans: {}, current: null, tab: 'einbau', me: null };
+
+  class ApiError extends Error {}
+
+  async function api(path, { method = 'GET', body } = {}) {
+    const res = await fetch(`/api/admin${path}`, {
+      method,
+      headers: { Authorization: `Bearer ${token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (res.status === 401) { logout(); throw new ApiError('Bitte erneut anmelden.'); }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const issue = data.issues?.[0];
+      throw new ApiError(data.message || (issue ? `Eingabe prüfen: ${issue.path?.join('.')} – ${issue.message}` : `Fehler ${res.status}`));
+    }
+    return data;
+  }
+
+  let toastTimer;
+  function toast(msg, isError = false) {
+    const t = $('#toast');
+    t.textContent = msg;
+    t.classList.toggle('error', isError);
+    t.classList.remove('hidden');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.add('hidden'), isError ? 6000 : 2600);
+  }
+
+  async function copy(text, label = 'Kopiert') {
+    try { await navigator.clipboard.writeText(text); toast(`${label} ✓`); } catch { toast('Kopieren nicht möglich – bitte manuell markieren.', true); }
+  }
+
+  /** Führt eine Aktion aus, sperrt dabei den Button und zeigt Fehler als Toast. */
+  async function busy(btn, fn) {
+    const old = btn?.textContent;
+    if (btn) { btn.disabled = true; }
+    try { return await fn(); } catch (err) { toast(err.message, true); return undefined; } finally { if (btn) { btn.disabled = false; btn.textContent = old; } }
+  }
+
+  const KIND = {
+    angebot: 'Angebot', rueckruf: 'Rückruf', termin: 'Termin', schaden: 'Schaden', miete: 'Miete', rezept: 'Rezept',
+    erstanfrage: 'Erstanfrage', anfrage: 'Anfrage', offene_frage: 'Offene Frage', sonstiges: 'Sonstiges',
+  };
+  const sourceLabel = (s) => (s === 'manual' ? 'Eigener Text' : s === 'website' ? 'Website' : s === 'faq' ? 'Ergänzte Antworten' : s.startsWith('pdf:') ? `PDF: ${s.slice(4)}` : s);
+  const industryLabel = (k) => state.industries.find((i) => i.key === k)?.label || k;
+  const planLabel = (k) => { const p = state.plans[k]; return p ? `${p.label}${p.priceEur ? ` (${p.priceEur} €)` : ''}` : k; };
+
+  // ------------------------------------------------------------ Anmeldung
+  function showLogin(msg) {
+    $('#app').classList.add('hidden');
+    $('#login').classList.remove('hidden');
+    const err = $('#login-error');
+    err.textContent = msg || '';
+    err.classList.toggle('hidden', !msg);
+    $('#token').focus();
+  }
+
+  function logout() {
+    token = null;
+    store.del('ek_admin_token');
+    showLogin();
+  }
+
+  $('#login-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    token = $('#token').value.trim();
+    try {
+      await api('/me');
+      store.set('ek_admin_token', token);
+      start();
+    } catch {
+      showLogin('Das Passwort stimmt nicht.');
+    }
+  });
+  $('#logout').addEventListener('click', logout);
+
+  // ------------------------------------------------------------ Start & Kundenliste
+  async function start() {
+    $('#login').classList.add('hidden');
+    $('#app').classList.remove('hidden');
+    try {
+      const [me, industries, plans] = await Promise.all([api('/me'), api('/industries'), api('/plans')]);
+      Object.assign(state, { me, industries, plans });
+      const badge = $('#llm-badge');
+      badge.textContent = me.llm === 'anthropic' ? 'Claude aktiv' : 'Demo-Modus (kein API-Key)';
+      badge.classList.toggle('warn', me.llm !== 'anthropic');
+      await loadTenants();
+      const fromHash = location.hash.match(/^#kunde\/([0-9a-f-]{36})(?:\/(\w+))?/);
+      if (fromHash) openTenant(fromHash[1], fromHash[2]);
+      else renderWelcome();
+    } catch (err) {
+      if (!(err instanceof ApiError)) showLogin('Server nicht erreichbar.');
+    }
+  }
+
+  async function loadTenants() {
+    state.tenants = await api('/tenants');
+    renderTenantList();
+  }
+
+  function renderTenantList() {
+    const q = $('#tenant-filter').value.trim().toLowerCase();
+    const list = state.tenants.filter((t) => !q || `${t.name} ${t.city || ''}`.toLowerCase().includes(q));
+    const customers = list.filter((t) => t.plan !== 'demo');
+    const demos = list.filter((t) => t.plan === 'demo');
+    const item = (t) => `<li><button type="button" data-id="${t.id}" aria-current="${state.current?.id === t.id}">
+        <span class="t-name">${esc(t.name)}${t.active ? '' : ' <span class="muted">(pausiert)</span>'}</span>
+        <span class="t-meta">${esc(industryLabel(t.industry))}${t.city ? `, ${esc(t.city)}` : ''}</span>
+        ${t.new_leads ? `<span class="t-count" title="Neue Anfragen">${t.new_leads}</span>` : ''}
+      </button></li>`;
+    $('#tenant-list').innerHTML =
+      (customers.length ? customers.map(item).join('') : '<li class="group">Noch keine Kunden</li>') +
+      (demos.length ? `<li class="group">Demos</li>${demos.map(item).join('')}` : '');
+  }
+
+  $('#tenant-filter').addEventListener('input', renderTenantList);
+  $('#tenant-list').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-id]');
+    if (b) openTenant(b.dataset.id);
+  });
+  $('#new-tenant-btn').addEventListener('click', renderNewTenant);
+
+  function renderWelcome() {
+    state.current = null;
+    renderTenantList();
+    const customers = state.tenants.filter((t) => t.plan !== 'demo');
+    const newLeads = state.tenants.reduce((s, t) => s + (t.new_leads || 0), 0);
+    const convs = state.tenants.reduce((s, t) => s + Number(t.conversations_month || 0), 0);
+    const mrr = customers.filter((t) => t.active).reduce((s, t) => s + (state.plans[t.plan]?.priceEur || 0), 0);
+    $('#main').innerHTML = `
+      <div class="welcome">
+        <h1>Übersicht</h1>
+        <p>Lege einen neuen Kunden an: Name, Branche und Website reichen. Den Rest liest der Import automatisch ein. Danach bekommst du die Code-Zeile zum Kopieren.</p>
+      </div>
+      <div class="panel"><div class="stats">
+        <div class="stat"><b>${customers.length}</b><span>Kunden</span></div>
+        <div class="stat"><b>${fmtNum(mrr)} €</b><span>Monatsumsatz (aktive Abos)</span></div>
+        <div class="stat"><b>${fmtNum(convs)}</b><span>Gespräche diesen Monat</span></div>
+        <div class="stat"><b>${newLeads}</b><span>Neue Anfragen</span></div>
+      </div></div>
+      <button class="btn btn-primary" type="button" id="welcome-new">Neuen Kunden anlegen</button>`;
+    $('#welcome-new').addEventListener('click', renderNewTenant);
+  }
+
+  // ------------------------------------------------------------ Neuer Kunde
+  function planOptions(selected = 'starter') {
+    return Object.entries(state.plans)
+      .map(([k]) => `<option value="${k}" ${k === selected ? 'selected' : ''}>${esc(planLabel(k))}</option>`).join('');
+  }
+  function industryOptions(selected) {
+    return state.industries.map((i) => `<option value="${i.key}" ${i.key === selected ? 'selected' : ''}>${esc(i.label)}</option>`).join('');
+  }
+
+  function renderNewTenant() {
+    state.current = null;
+    renderTenantList();
+    history.replaceState(null, '', '#neu');
+    $('#main').innerHTML = `
+      <div class="page-head"><div><h1>Neuer Kunde</h1><div class="sub">In 2 Minuten startklar: anlegen, Website einlesen, Code-Zeile kopieren.</div></div></div>
+      <form id="new-form" class="panel">
+        <div class="grid-2">
+          <div class="field"><label for="n-name">Name des Betriebs *</label><input id="n-name" type="text" required minlength="2" placeholder="z. B. Malerei Müller"></div>
+          <div class="field"><label for="n-industry">Branche *</label><select id="n-industry">${industryOptions('handwerk')}</select></div>
+          <div class="field"><label for="n-website">Website</label><input id="n-website" type="text" placeholder="malerei-mueller.de">
+            <p class="hint">Die Domain wird automatisch für das Widget freigeschaltet.</p></div>
+          <div class="field"><label for="n-city">Stadt</label><input id="n-city" type="text" placeholder="Darmstadt"></div>
+          <div class="field"><label for="n-email">E-Mail für Anfragen</label><input id="n-email" type="email" placeholder="info@malerei-mueller.de">
+            <p class="hint">Hierhin schickt der Assistent neue Anfragen und offene Fragen.</p></div>
+          <div class="field"><label for="n-phone">Telefon</label><input id="n-phone" type="tel" placeholder="06151 …"></div>
+          <div class="field"><label for="n-plan">Paket</label><select id="n-plan">${planOptions('starter')}</select></div>
+          <div class="field"><label for="n-color">Farbe des Chats</label><input id="n-color" type="color" value="#1f4e79"></div>
+        </div>
+        <div class="field"><label class="check"><input id="n-import" type="checkbox" checked> Website direkt einlesen (Leistungen, Preise, Öffnungszeiten …)</label></div>
+        <button class="btn btn-primary" type="submit" id="n-submit">Kunde anlegen</button>
+        <div id="n-progress" class="progress hidden"><span class="spinner"></span><span></span></div>
+      </form>`;
+    $('#n-name').focus();
+    $('#new-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = $('#n-submit');
+      const website = $('#n-website').value.trim();
+      const progress = $('#n-progress');
+      const say = (t) => { progress.classList.remove('hidden'); progress.lastElementChild.textContent = t; };
+      await busy(btn, async () => {
+        say('Kunde wird angelegt …');
+        const t = await api('/tenants', {
+          method: 'POST',
+          body: {
+            name: $('#n-name').value.trim(),
+            industry: $('#n-industry').value,
+            website,
+            city: $('#n-city').value.trim(),
+            contactEmail: $('#n-email').value.trim(),
+            phone: $('#n-phone').value.trim(),
+            plan: $('#n-plan').value,
+            settings: { color: $('#n-color').value },
+          },
+        });
+        if (website && $('#n-import').checked) {
+          say('Website wird eingelesen … (kann 30–60 Sekunden dauern)');
+          try {
+            const r = await api(`/tenants/${t.id}/import/website`, { method: 'POST', body: { url: website } });
+            toast(`${r.pages.length} Seiten eingelesen ✓`);
+          } catch (err) {
+            toast(`Kunde angelegt, aber Website-Import fehlgeschlagen: ${err.message}`, true);
+          }
+        }
+        await loadTenants();
+        openTenant(t.id, 'einbau');
+      });
+      progress.classList.add('hidden');
+    });
+  }
+
+  // ------------------------------------------------------------ Kundenansicht
+  const TABS = [
+    ['einbau', 'Einbau'], ['wissen', 'Wissen'], ['anfragen', 'Anfragen'], ['fragen', 'Offene Fragen'],
+    ['gespraeche', 'Gespräche'], ['einstellungen', 'Einstellungen'],
+  ];
+
+  async function openTenant(id, tab) {
+    try {
+      state.current = await api(`/tenants/${id}`);
+    } catch (err) { toast(err.message, true); return; }
+    state.tab = tab || (state.current?.id === id ? state.tab : 'einbau');
+    if (!TABS.some(([k]) => k === state.tab)) state.tab = 'einbau';
+    renderTenantList();
+    renderTenant();
+  }
+
+  async function refreshCurrent() {
+    state.current = await api(`/tenants/${state.current.id}`);
+    loadTenants();
+  }
+
+  function renderTenant() {
+    const t = state.current;
+    const listEntry = state.tenants.find((x) => x.id === t.id);
+    history.replaceState(null, '', `#kunde/${t.id}/${state.tab}`);
+    $('#main').innerHTML = `
+      <div class="page-head">
+        <div><h1>${esc(t.name)}</h1>
+          <div class="sub">${esc(industryLabel(t.industry))}${t.city ? `, ${esc(t.city)}` : ''} · ${esc(planLabel(t.plan))}${t.active ? '' : ' · <strong>pausiert</strong>'}</div></div>
+        <div class="copy-row">
+          <button class="btn btn-secondary" type="button" id="test-chat">Chat testen</button>
+          ${t.website ? `<a class="btn btn-secondary" href="${esc(t.website.startsWith('http') ? t.website : `https://${t.website}`)}" target="_blank" rel="noopener">Website öffnen</a>` : ''}
+        </div>
+      </div>
+      <div class="tabs" role="tablist">${TABS.map(([k, label]) => `<button type="button" role="tab" data-tab="${k}" aria-selected="${state.tab === k}">${label}${k === 'anfragen' && listEntry?.new_leads ? `<span class="count">${listEntry.new_leads}</span>` : ''}</button>`).join('')}</div>
+      <div id="tab-body"></div>`;
+    $('.tabs').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-tab]');
+      if (!b) return;
+      state.tab = b.dataset.tab;
+      renderTenant();
+    });
+    $('#test-chat').addEventListener('click', () => {
+      if (!window.EmpfangKI) return toast('Widget nicht geladen.', true);
+      window.EmpfangKI.use(t.public_key, { open: true });
+    });
+    const body = $('#tab-body');
+    ({ einbau: tabEinbau, wissen: tabWissen, anfragen: tabAnfragen, fragen: tabFragen, gespraeche: tabGespraeche, einstellungen: tabEinstellungen })[state.tab](body, t);
+  }
+
+  // --- Einbau
+  function tabEinbau(body, t) {
+    const limit = t.planInfo?.monthlyConversations || 0;
+    const used = Number(t.usage?.conversations || 0);
+    const pct = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+    const noKnowledge = !t.knowledge?.chunks;
+    body.innerHTML = `
+      ${noKnowledge ? `<div class="panel" style="border-color:var(--messing);background:var(--warn-soft)"><strong>Noch kein Wissen hinterlegt.</strong> Der Assistent kann noch nichts beantworten. <button class="link-btn" type="button" id="go-wissen">Jetzt Website oder PDF einlesen</button></div>` : ''}
+      <div class="panel">
+        <h2>Code-Zeile für die Website</h2>
+        <p class="hint">Diese Zeile kommt vor das Ende von &lt;/body&gt; auf der Website des Kunden. Sie funktioniert nur auf den freigeschalteten Domains.</p>
+        <div class="code" id="snippet">${esc(t.snippet)}</div>
+        <div class="copy-row"><button class="btn btn-primary" type="button" id="copy-snippet">Code kopieren</button>
+          <span class="hint">Freigeschaltet: ${t.allowed_origins.length ? t.allowed_origins.map(esc).join(', ') : '<strong>keine Domain</strong>, bitte unter Einstellungen eintragen'}</span></div>
+        <h2 style="margin-top:22px">So wird der Code eingebaut</h2>
+        <ul class="steps-list">
+          <li><strong>WordPress:</strong> Plugin „WPCode“ installieren → Code-Snippets → Kopf- und Fußzeile → Code in „Fußzeile“ einfügen → Speichern.</li>
+          <li><strong>Jimdo:</strong> Einstellungen → Header bearbeiten → Code einfügen → Speichern.</li>
+          <li><strong>Wix:</strong> Einstellungen → Benutzerdefinierter Code → Code hinzufügen → „Body – Ende“, alle Seiten (bezahlter Wix-Tarif nötig).</li>
+          <li><strong>Eigene Website:</strong> Zeile vor &lt;/body&gt; in jede Seite oder ins Template einfügen.</li>
+        </ul>
+      </div>
+      <div class="panel">
+        <h2>Eigene Chat-Seite</h2>
+        <p class="hint">Für Betriebe ohne Website: als Link für Google Maps, Instagram, E-Mail-Signatur oder als QR-Code.</p>
+        <div class="copy-row"><a href="${esc(t.hostedUrl)}" target="_blank" rel="noopener">${esc(t.hostedUrl)}</a>
+          <button class="btn btn-secondary" type="button" id="copy-hosted">Link kopieren</button></div>
+      </div>
+      <div class="panel">
+        <h2>Diesen Monat</h2>
+        <div class="stats" style="margin-top:12px">
+          <div class="stat"><b>${fmtNum(used)}</b><span>von ${fmtNum(limit)} Gesprächen</span><div class="meter"><i style="width:${pct}%"></i></div></div>
+          <div class="stat"><b>${fmtNum(t.usage?.messages)}</b><span>Antworten</span></div>
+          <div class="stat"><b>${fmtNum(t.knowledge?.chunks)}</b><span>Wissensabschnitte</span></div>
+          <div class="stat"><b>${(((Number(t.usage?.input_tokens) || 0) * 1 + (Number(t.usage?.output_tokens) || 0) * 5 + (Number(t.usage?.cache_read_tokens) || 0) * 0.1) / 1e6).toFixed(2).replace('.', ',')} $</b><span>KI-Kosten (geschätzt)</span></div>
+        </div>
+      </div>`;
+    $('#copy-snippet').addEventListener('click', () => copy(t.snippet, 'Code kopiert'));
+    $('#copy-hosted').addEventListener('click', () => copy(t.hostedUrl, 'Link kopiert'));
+    $('#go-wissen')?.addEventListener('click', () => { state.tab = 'wissen'; renderTenant(); });
+  }
+
+  // --- Wissen
+  async function tabWissen(body, t) {
+    body.innerHTML = `
+      <div class="panel">
+        <h2>Website einlesen</h2>
+        <p class="hint">Liest bis zu 12 Seiten (Leistungen, Preise, Kontakt …) und fasst sie mit KI zu einer sauberen Wissensbasis zusammen. Ersetzt den vorherigen Website-Import.</p>
+        <form id="w-form" class="copy-row">
+          <input id="w-url" type="text" value="${esc(t.website || '')}" placeholder="www.beispiel.de" style="flex:1;min-width:220px" required>
+          <button class="btn btn-primary" type="submit" id="w-btn">Website einlesen</button>
+        </form>
+        <div id="w-progress" class="progress hidden"><span class="spinner"></span><span>Website wird gelesen und zusammengefasst … (30–60 Sekunden)</span></div>
+        <div id="w-result"></div>
+      </div>
+      <div class="panel">
+        <h2>PDF hochladen</h2>
+        <p class="hint">Preisliste, Flyer, Speisekarte, Leistungsbeschreibung … (Text-PDFs, max. 20 MB). Jede Datei wird eine eigene Quelle.</p>
+        <div class="copy-row"><input id="p-file" type="file" accept="application/pdf,.pdf" multiple>
+          <button class="btn btn-primary" type="button" id="p-btn">Hochladen</button></div>
+        <div id="p-progress" class="progress hidden"><span class="spinner"></span><span></span></div>
+      </div>
+      <div class="panel">
+        <h2>Eigener Text</h2>
+        <p class="hint">Alles, was sonst nirgends steht: Öffnungszeiten an Feiertagen, Notdienst, Besonderheiten. Überschriften mit „# “ beginnen.</p>
+        <textarea id="m-text" rows="8" placeholder="# Öffnungszeiten&#10;Mo–Fr 8–17 Uhr&#10;&#10;# Notdienst&#10;Am Wochenende unter 0151 …"></textarea>
+        <div class="copy-row" style="margin-top:10px"><button class="btn btn-primary" type="button" id="m-btn">Text speichern</button>
+          <span class="hint">Ersetzt den bisherigen eigenen Text.</span></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>Gespeichertes Wissen</h2><span class="hint">${fmtNum(t.knowledge?.chunks)} Abschnitte, ca. ${fmtNum(t.knowledge?.tokens)} Tokens</span></div>
+        <div id="sources" class="rows"></div>
+        <details style="margin-top:14px" id="chunks-details"><summary>Alle Abschnitte ansehen und einzeln löschen</summary><div id="chunks" style="margin-top:8px"></div></details>
+      </div>`;
+
+    // Quellen
+    const sources = $('#sources');
+    sources.innerHTML = t.sources.length
+      ? t.sources.map((s) => `<div class="row source-row"><div><div class="row-title">${esc(sourceLabel(s.source))}</div><div class="row-meta">${s.chunks} Abschnitte · aktualisiert ${fmtDate(s.updated_at)}</div></div>
+          <span class="row-meta">${fmtNum(s.tokens)} Tokens</span>
+          <button class="btn btn-danger" type="button" data-del-source="${esc(s.source)}">Löschen</button></div>`).join('')
+      : '<div class="empty">Noch kein Wissen. Lies die Website ein oder lade ein PDF hoch.</div>';
+    sources.addEventListener('click', async (e) => {
+      const b = e.target.closest('[data-del-source]');
+      if (!b || !confirm(`„${sourceLabel(b.dataset.delSource)}“ wirklich löschen?`)) return;
+      await busy(b, async () => {
+        await api(`/tenants/${t.id}/knowledge/source/${encodeURIComponent(b.dataset.delSource)}`, { method: 'DELETE' });
+        toast('Gelöscht');
+        await refreshCurrent();
+        renderTenant();
+      });
+    });
+
+    // Eigener Text vorbefüllen + alle Abschnitte
+    const chunks = await api(`/tenants/${t.id}/knowledge`).catch(() => []);
+    const manual = chunks.filter((c) => c.source === 'manual');
+    if (manual.length) $('#m-text').value = manual.map((c) => `# ${c.title}\n${c.content}`).join('\n\n');
+    $('#chunks').innerHTML = chunks.map((c) => `<div class="chunk"><div><strong>${esc(c.title)}</strong> <span class="row-meta">· ${esc(sourceLabel(c.source))}</span><pre>${esc(c.content)}</pre></div>
+      <button class="btn btn-danger" type="button" data-del-chunk="${c.id}">Löschen</button></div>`).join('') || '<p class="hint">Keine Abschnitte.</p>';
+    $('#chunks').addEventListener('click', async (e) => {
+      const b = e.target.closest('[data-del-chunk]');
+      if (!b) return;
+      await busy(b, async () => {
+        await api(`/tenants/${t.id}/knowledge/${b.dataset.delChunk}`, { method: 'DELETE' });
+        b.closest('.chunk').remove();
+        toast('Abschnitt gelöscht');
+        refreshCurrent();
+      });
+    });
+
+    // Website-Import
+    $('#w-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      $('#w-progress').classList.remove('hidden');
+      $('#w-result').innerHTML = '';
+      await busy($('#w-btn'), async () => {
+        const r = await api(`/tenants/${t.id}/import/website`, { method: 'POST', body: { url: $('#w-url').value.trim() } });
+        toast(`${r.pages.length} Seiten eingelesen ✓`);
+        await refreshCurrent();
+        renderTenant();
+        $('#w-result').innerHTML = `<p class="hint">${r.pages.length} Seiten gelesen${r.condensed ? ', mit KI zusammengefasst' : ' (Rohtext, ohne KI-Zusammenfassung)'}: ${r.pages.map((p) => esc(new URL(p.url).pathname)).join(', ')}</p>
+          <details><summary>Vorschau</summary><div class="preview">${esc(r.preview)}</div></details>`;
+      });
+      $('#w-progress')?.classList.add('hidden');
+    });
+
+    // PDF-Upload
+    $('#p-btn').addEventListener('click', async () => {
+      const files = [...$('#p-file').files];
+      if (!files.length) return toast('Bitte zuerst eine PDF-Datei auswählen.', true);
+      const progress = $('#p-progress');
+      await busy($('#p-btn'), async () => {
+        for (const file of files) {
+          if (file.size > 20 * 1024 * 1024) { toast(`${file.name} ist größer als 20 MB.`, true); continue; }
+          progress.classList.remove('hidden');
+          progress.lastElementChild.textContent = `${file.name} wird gelesen …`;
+          const dataBase64 = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result).split(',')[1]);
+            reader.onerror = () => reject(new Error('Datei konnte nicht gelesen werden.'));
+            reader.readAsDataURL(file);
+          });
+          try {
+            const r = await api(`/tenants/${t.id}/import/pdf`, { method: 'POST', body: { filename: file.name, dataBase64 } });
+            toast(`${file.name}: ${r.pages} Seiten eingelesen ✓`);
+          } catch (err) { toast(`${file.name}: ${err.message}`, true); }
+        }
+        progress.classList.add('hidden');
+        await refreshCurrent();
+        renderTenant();
+      });
+    });
+
+    // Eigener Text
+    $('#m-btn').addEventListener('click', async () => {
+      const text = $('#m-text').value.trim();
+      await busy($('#m-btn'), async () => {
+        if (!text) {
+          await api(`/tenants/${t.id}/knowledge/source/manual`, { method: 'DELETE' });
+        } else {
+          await api(`/tenants/${t.id}/knowledge`, { method: 'PUT', body: { source: 'manual', title: 'Allgemein', text } });
+        }
+        toast('Gespeichert ✓');
+        await refreshCurrent();
+        renderTenant();
+      });
+    });
+  }
+
+  // --- Anfragen
+  async function tabAnfragen(body, t) {
+    body.innerHTML = '<div class="progress"><span class="spinner"></span>Lade Anfragen …</div>';
+    const leads = await api(`/tenants/${t.id}/leads`).catch((e) => { toast(e.message, true); return []; });
+    if (!leads.length) { body.innerHTML = '<div class="empty">Noch keine Anfragen. Sobald jemand im Chat eine Anfrage hinterlässt, erscheint sie hier und wird per E-Mail geschickt.</div>'; return; }
+    body.innerHTML = `<div class="rows">${leads.map((l) => `
+      <div class="row">
+        <div class="row-head">
+          <div><span class="kind ${l.kind === 'offene_frage' ? 'open' : ''}">${esc(KIND[l.kind] || l.kind)}</span><span class="row-title">${esc(l.name)}</span></div>
+          <div class="copy-row"><span class="row-meta">${fmtDate(l.created_at)}${l.notified_at ? ' · E-Mail gesendet' : ''}</span>
+            <select class="status-select" data-lead="${l.id}" aria-label="Status">
+              ${['neu', 'in_bearbeitung', 'erledigt'].map((s) => `<option value="${s}" ${l.status === s ? 'selected' : ''}>${{ neu: 'Neu', in_bearbeitung: 'In Bearbeitung', erledigt: 'Erledigt' }[s]}</option>`).join('')}
+            </select></div>
+        </div>
+        <p class="contact">${l.phone ? `<a href="tel:${esc(l.phone.replace(/[^\d+]/g, ''))}">${esc(l.phone)}</a>` : ''}${l.email ? `<a href="mailto:${esc(l.email)}">${esc(l.email)}</a>` : ''}</p>
+        ${l.open_question ? `<p><strong>Frage:</strong> ${esc(l.open_question)}</p>` : ''}
+        <p>${esc(l.summary)}</p>
+        ${Object.keys(l.details || {}).length ? `<p class="row-meta">${Object.entries(l.details).map(([k, v]) => `${esc(k)}: ${esc(v)}`).join(' · ')}</p>` : ''}
+      </div>`).join('')}</div>`;
+    body.addEventListener('change', async (e) => {
+      const sel = e.target.closest('[data-lead]');
+      if (!sel) return;
+      try { await api(`/leads/${sel.dataset.lead}`, { method: 'PATCH', body: { status: sel.value } }); toast('Status gespeichert'); loadTenants(); } catch (err) { toast(err.message, true); }
+    });
+  }
+
+  // --- Offene Fragen (Wissenslücken)
+  async function tabFragen(body, t) {
+    body.innerHTML = '<div class="progress"><span class="spinner"></span>Lade offene Fragen …</div>';
+    const items = await api(`/tenants/${t.id}/open-questions`).catch((e) => { toast(e.message, true); return []; });
+    const open = items.filter((q) => q.status !== 'erledigt');
+    const done = items.filter((q) => q.status === 'erledigt');
+    body.innerHTML = `
+      <p class="hint" style="margin:0 0 14px">Diese Fragen konnte der Assistent nicht beantworten. Trag die Antwort ein: Ab dann weiß er es. Die Person hat ihre Kontaktdaten hinterlassen und wartet auf eine Rückmeldung.</p>
+      ${open.length ? `<div class="rows">${open.map((q) => `
+        <div class="row" data-q="${q.id}">
+          <div class="row-head"><span class="row-title">${esc(q.open_question)}</span><span class="row-meta">${fmtDate(q.created_at)}</span></div>
+          <p class="contact row-meta">${esc(q.name)} ${q.phone ? `· <a href="tel:${esc(q.phone.replace(/[^\d+]/g, ''))}">${esc(q.phone)}</a>` : ''} ${q.email ? `· <a href="mailto:${esc(q.email)}">${esc(q.email)}</a>` : ''}</p>
+          <div class="answer-box">
+            <label for="a-${q.id}" class="hidden">Antwort</label>
+            <textarea id="a-${q.id}" rows="3" placeholder="Antwort, die der Assistent künftig geben soll …"></textarea>
+            <div class="copy-row"><button class="btn btn-primary" type="button" data-answer="${q.id}">Antwort hinzufügen</button>
+              <button class="btn btn-secondary" type="button" data-skip="${q.id}">Ohne Antwort erledigt</button></div>
+          </div>
+        </div>`).join('')}</div>` : '<div class="empty">Keine offenen Fragen. Der Assistent konnte bisher alles beantworten.</div>'}
+      ${done.length ? `<details style="margin-top:18px"><summary>Erledigt (${done.length})</summary><div class="rows" style="margin-top:10px">${done.map((q) => `<div class="row"><div class="row-head"><span>${esc(q.open_question)}</span><span class="row-meta">${fmtDate(q.created_at)}</span></div></div>`).join('')}</div></details>` : ''}`;
+    body.addEventListener('click', async (e) => {
+      const a = e.target.closest('[data-answer]');
+      const s = e.target.closest('[data-skip]');
+      if (a) {
+        const q = open.find((x) => x.id === a.dataset.answer);
+        const answer = $(`#a-${q.id}`).value.trim();
+        if (!answer) return toast('Bitte zuerst eine Antwort eintragen.', true);
+        await busy(a, async () => {
+          await api(`/tenants/${t.id}/faq`, { method: 'POST', body: { question: q.open_question, answer, leadId: q.id } });
+          toast('Antwort gespeichert. Der Assistent weiß es ab jetzt ✓');
+          await refreshCurrent();
+          renderTenant();
+        });
+      } else if (s) {
+        await busy(s, async () => {
+          await api(`/leads/${s.dataset.skip}`, { method: 'PATCH', body: { status: 'erledigt' } });
+          renderTenant();
+        });
+      }
+    });
+  }
+
+  // --- Gespräche
+  async function tabGespraeche(body, t) {
+    body.innerHTML = '<div class="progress"><span class="spinner"></span>Lade Gespräche …</div>';
+    const convs = await api(`/tenants/${t.id}/conversations`).catch((e) => { toast(e.message, true); return []; });
+    body.innerHTML = `<p class="hint" style="margin:0 0 14px">Die letzten 50 Gespräche. Gespräche werden nach der eingestellten Frist automatisch gelöscht.</p>` + (convs.length
+      ? `<div class="rows">${convs.map((c) => {
+          const first = c.messages?.find((m) => m.role === 'user')?.content || '';
+          return `<details class="row"><summary><span>${esc(first.slice(0, 90))}${first.length > 90 ? ' …' : ''}</span> <span class="row-meta">· ${fmtDate(c.last_at)} · ${c.message_count} Nachrichten</span></summary>
+            <div class="msgs">${(c.messages || []).map((m) => `<div class="msg ${m.role}">${esc(m.content)}</div>`).join('')}</div></details>`;
+        }).join('')}</div>`
+      : '<div class="empty">Noch keine Gespräche.</div>');
+  }
+
+  // --- Einstellungen
+  function tabEinstellungen(body, t) {
+    const s = t.settings || {};
+    body.innerHTML = `
+      <form id="s-form">
+        <div class="panel">
+          <h2>Betrieb</h2>
+          <div class="grid-2" style="margin-top:14px">
+            <div class="field"><label for="s-name">Name</label><input id="s-name" type="text" value="${esc(t.name)}" required></div>
+            <div class="field"><label for="s-industry">Branche</label><select id="s-industry">${industryOptions(t.industry)}</select></div>
+            <div class="field"><label for="s-website">Website</label><input id="s-website" type="text" value="${esc(t.website || '')}"></div>
+            <div class="field"><label for="s-city">Stadt</label><input id="s-city" type="text" value="${esc(t.city || '')}"></div>
+            <div class="field"><label for="s-email">E-Mail für Anfragen</label><input id="s-email" type="email" value="${esc(t.contact_email || '')}"></div>
+            <div class="field"><label for="s-phone">Telefon</label><input id="s-phone" type="tel" value="${esc(t.phone || '')}"></div>
+            <div class="field"><label for="s-plan">Paket</label><select id="s-plan">${planOptions(t.plan)}</select></div>
+            <div class="field"><label for="s-origins">Freigeschaltete Domains</label><input id="s-origins" type="text" value="${esc(t.allowed_origins.map((o) => o.replace(/^https?:\/\//, '')).filter((o, i, a) => !(o.startsWith('www.') && a.includes(o.slice(4)))).join(', '))}" placeholder="beispiel.de, shop.beispiel.de">
+              <p class="hint">Durch Komma getrennt. „www.“ wird automatisch ergänzt.</p></div>
+          </div>
+        </div>
+        <div class="panel">
+          <h2>Chat</h2>
+          <div class="grid-2" style="margin-top:14px">
+            <div class="field"><label for="s-color">Farbe</label><input id="s-color" type="color" value="${esc(s.color || '#1f4e79')}"></div>
+            <div class="field"><label for="s-position">Position</label><select id="s-position"><option value="right" ${s.position !== 'left' ? 'selected' : ''}>Unten rechts</option><option value="left" ${s.position === 'left' ? 'selected' : ''}>Unten links</option></select></div>
+          </div>
+          <div class="field"><label for="s-greeting">Begrüßung</label><textarea id="s-greeting" rows="2" placeholder="Leer lassen für die Standard-Begrüßung der Branche">${esc(s.greeting || '')}</textarea></div>
+          <div class="field"><label for="s-quick">Schnellantworten (eine pro Zeile, max. 4)</label><textarea id="s-quick" rows="3" placeholder="Leer lassen für die Standard-Vorschläge der Branche">${esc((s.quickReplies || []).join('\n'))}</textarea></div>
+          <div class="grid-2">
+            <div class="field"><label for="s-booking">Online-Buchungslink</label><input id="s-booking" type="url" value="${esc(s.bookingUrl || '')}" placeholder="https://…"></div>
+            <div class="field"><label for="s-privacy">Link zur Datenschutzerklärung des Kunden</label><input id="s-privacy" type="url" value="${esc(s.privacyUrl || '')}" placeholder="https://…/datenschutz"></div>
+          </div>
+          <div class="field"><label for="s-extra">Zusätzliche Anweisungen an den Assistenten</label><textarea id="s-extra" rows="3" placeholder="z. B. „Wir nehmen keine Aufträge unter 500 € an.“ oder „Immer auf den Notdienst hinweisen.“">${esc(s.extraInstructions || '')}</textarea></div>
+        </div>
+        <div class="panel">
+          <h2>Status</h2>
+          <label class="check" style="margin-top:10px"><input id="s-active" type="checkbox" ${t.active ? 'checked' : ''}> Assistent ist aktiv (aus = Widget erscheint nicht mehr, z. B. bei Kündigung)</label>
+        </div>
+        <button class="btn btn-primary" type="submit" id="s-btn">Einstellungen speichern</button>
+      </form>`;
+    $('#s-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const quick = $('#s-quick').value.split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 4);
+      const settings = {
+        ...s,
+        color: $('#s-color').value,
+        position: $('#s-position').value,
+        greeting: $('#s-greeting').value.trim() || undefined,
+        quickReplies: quick.length ? quick : undefined,
+        bookingUrl: $('#s-booking').value.trim() || undefined,
+        privacyUrl: $('#s-privacy').value.trim() || undefined,
+        extraInstructions: $('#s-extra').value.trim() || undefined,
+      };
+      Object.keys(settings).forEach((k) => settings[k] === undefined && delete settings[k]);
+      await busy($('#s-btn'), async () => {
+        await api(`/tenants/${t.id}`, {
+          method: 'PATCH',
+          body: {
+            name: $('#s-name').value.trim(),
+            industry: $('#s-industry').value,
+            website: $('#s-website').value.trim(),
+            city: $('#s-city').value.trim(),
+            contactEmail: $('#s-email').value.trim(),
+            phone: $('#s-phone').value.trim(),
+            plan: $('#s-plan').value,
+            allowedOrigins: $('#s-origins').value.split(',').map((x) => x.trim()).filter(Boolean),
+            active: $('#s-active').checked,
+            settings,
+          },
+        });
+        toast('Gespeichert ✓');
+        await refreshCurrent();
+        renderTenant();
+      });
+    });
+  }
+
+  // ------------------------------------------------------------ Los geht's
+  if (token) start(); else showLogin();
+})();

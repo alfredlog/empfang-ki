@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Admin – Empfang KI</title>
+  <link rel="stylesheet" href="/assets/fonts.css">
+  <link rel="stylesheet" href="/admin/admin.css">
+</head>
+<body>
+  <!-- Anmeldung -->
+  <main id="login" class="login hidden">
+    <form id="login-form" class="login-card">
+      <div class="brand"><span class="brand-bell" aria-hidden="true"></span>Empfang KI</div>
+      <h1>Admin-Bereich</h1>
+      <label for="token">Admin-Passwort</label>
+      <input id="token" type="password" autocomplete="current-password" required placeholder="ADMIN_TOKEN aus der .env">
+      <p id="login-error" class="error hidden" role="alert"></p>
+      <button class="btn btn-primary" type="submit">Anmelden</button>
+    </form>
+  </main>
+
+  <!-- App -->
+  <div id="app" class="app hidden">
+    <header class="topbar">
+      <a class="brand" href="/admin/"><span class="brand-bell" aria-hidden="true"></span>Empfang KI <span class="muted">Admin</span></a>
+      <div class="topbar-right">
+        <span id="llm-badge" class="badge"></span>
+        <a href="/" target="_blank" rel="noopener">Website</a>
+        <button id="logout" class="link-btn" type="button">Abmelden</button>
+      </div>
+    </header>
+
+    <aside class="sidebar" aria-label="Kunden">
+      <button id="new-tenant-btn" class="btn btn-primary btn-block" type="button">Neuer Kunde</button>
+      <input id="tenant-filter" class="filter" type="search" placeholder="Kunden suchen …" aria-label="Kunden suchen">
+      <ul id="tenant-list" class="tenant-list"></ul>
+    </aside>
+
+    <main id="main" class="main" tabindex="-1"></main>
+  </div>
+
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+  <script src="/admin/admin.js" defer></script>
+  <script src="/widget.js" defer></script>
+</body>
+</html>
