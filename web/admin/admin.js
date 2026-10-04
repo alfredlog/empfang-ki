@@ -14,18 +14,25 @@
     del(k) { try { sessionStorage.removeItem(k); } catch { /* privat-Modus */ } },
   };
 
-  let token = store.get('ek_admin_token');
+  // Gleiche Oberfläche für zwei Rollen: "admin" (/admin, alle Kunden) und "portal" (/app, eigener Betrieb)
+  const MODE = document.body.dataset.mode === 'portal' ? 'portal' : 'admin';
+  const IS_ADMIN = MODE === 'admin';
+  const API_BASE = IS_ADMIN ? '/api/admin' : '/api/portal';
+  let token = IS_ADMIN ? store.get('ek_admin_token') : null;
   const state = { tenants: [], industries: [], plans: {}, current: null, tab: 'einbau', me: null };
+  /** Pfad zu einem Kunden: Admin über die ID, Kunde immer nur der eigene Betrieb. */
+  const T = (t) => (IS_ADMIN ? `/tenants/${typeof t === 'string' ? t : t.id}` : '/tenant');
 
   class ApiError extends Error {}
 
   async function api(path, { method = 'GET', body } = {}) {
-    const res = await fetch(`/api/admin${path}`, {
+    const res = await fetch(`${API_BASE}${path}`, {
       method,
-      headers: { Authorization: `Bearer ${token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+      credentials: 'same-origin',
+      headers: { ...(IS_ADMIN ? { Authorization: `Bearer ${token}` } : {}), ...(body ? { 'Content-Type': 'application/json' } : {}) },
       body: body ? JSON.stringify(body) : undefined,
     });
-    if (res.status === 401) { logout(); throw new ApiError('Bitte erneut anmelden.'); }
+    if (res.status === 401) { showLogin(); throw new ApiError('Bitte erneut anmelden.'); }
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       const issue = data.issues?.[0];
@@ -70,27 +77,54 @@
     const err = $('#login-error');
     err.textContent = msg || '';
     err.classList.toggle('hidden', !msg);
-    $('#token').focus();
+    $(IS_ADMIN ? '#token' : '#email').focus();
   }
 
-  function logout() {
-    token = null;
-    store.del('ek_admin_token');
+  async function logout() {
+    if (IS_ADMIN) { token = null; store.del('ek_admin_token'); }
+    else { try { await fetch('/api/portal/logout', { method: 'POST', credentials: 'same-origin' }); } catch { /* offline */ } }
     showLogin();
   }
 
   $('#login-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-    token = $('#token').value.trim();
+    if (IS_ADMIN) {
+      token = $('#token').value.trim();
+      try {
+        await api('/me');
+        store.set('ek_admin_token', token);
+        start();
+      } catch {
+        showLogin('Das Passwort stimmt nicht.');
+      }
+      return;
+    }
+    // Kunde: Magic Link anfordern
+    const btn = $('#login-form button');
+    btn.disabled = true;
     try {
-      await api('/me');
-      store.set('ek_admin_token', token);
-      start();
+      const res = await fetch('/api/portal/login', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: $('#email').value.trim(), next: `/app/${location.hash}` }),
+      });
+      if (!res.ok && res.status !== 429) throw new Error();
+      $('#login-form').classList.add('hidden');
+      $('#login-sent').classList.remove('hidden');
+      $('#login-sent-mail').textContent = $('#email').value.trim();
     } catch {
-      showLogin('Das Passwort stimmt nicht.');
+      showLogin('Das hat nicht geklappt. Bitte prüfen Sie die E-Mail-Adresse und versuchen Sie es erneut.');
+    } finally {
+      btn.disabled = false;
     }
   });
   $('#logout').addEventListener('click', logout);
+  $('#login-again')?.addEventListener('click', () => {
+    $('#login-sent').classList.add('hidden');
+    $('#login-form').classList.remove('hidden');
+    showLogin();
+  });
 
   // ------------------------------------------------------------ Start & Kundenliste
   async function start() {
@@ -100,8 +134,15 @@
       const [me, industries, plans] = await Promise.all([api('/me'), api('/industries'), api('/plans')]);
       Object.assign(state, { me, industries, plans });
       const badge = $('#llm-badge');
-      badge.textContent = me.llm === 'anthropic' ? 'Claude aktiv' : 'Demo-Modus (kein API-Key)';
-      badge.classList.toggle('warn', me.llm !== 'anthropic');
+      if (IS_ADMIN) {
+        badge.textContent = me.llm === 'anthropic' ? 'Claude aktiv' : 'Demo-Modus (kein API-Key)';
+        badge.classList.toggle('warn', me.llm !== 'anthropic');
+      } else {
+        badge.textContent = me.email;
+        badge.classList.add('neutral');
+        const tab = (location.hash.match(/^#(\w+)/) || [])[1];
+        return openTenant(me.tenantId, tab);
+      }
       await loadTenants();
       const fromHash = location.hash.match(/^#kunde\/([0-9a-f-]{36})(?:\/(\w+))?/);
       if (fromHash) openTenant(fromHash[1], fromHash[2]);
@@ -112,11 +153,13 @@
   }
 
   async function loadTenants() {
+    if (!IS_ADMIN) return;
     state.tenants = await api('/tenants');
     renderTenantList();
   }
 
   function renderTenantList() {
+    if (!IS_ADMIN) return;
     const q = $('#tenant-filter').value.trim().toLowerCase();
     const list = state.tenants.filter((t) => !q || `${t.name} ${t.city || ''}`.toLowerCase().includes(q));
     const customers = list.filter((t) => t.plan !== 'demo');
@@ -131,12 +174,12 @@
       (demos.length ? `<li class="group">Demos</li>${demos.map(item).join('')}` : '');
   }
 
-  $('#tenant-filter').addEventListener('input', renderTenantList);
-  $('#tenant-list').addEventListener('click', (e) => {
+  $('#tenant-filter')?.addEventListener('input', renderTenantList);
+  $('#tenant-list')?.addEventListener('click', (e) => {
     const b = e.target.closest('button[data-id]');
     if (b) openTenant(b.dataset.id);
   });
-  $('#new-tenant-btn').addEventListener('click', renderNewTenant);
+  $('#new-tenant-btn')?.addEventListener('click', renderNewTenant);
 
   function renderWelcome() {
     state.current = null;
@@ -217,7 +260,7 @@
         if (website && $('#n-import').checked) {
           say('Website wird eingelesen … (kann 30–60 Sekunden dauern)');
           try {
-            const r = await api(`/tenants/${t.id}/import/website`, { method: 'POST', body: { url: website } });
+            const r = await api(T(t) + `/import/website`, { method: 'POST', body: { url: website } });
             toast(`${r.pages.length} Seiten eingelesen ✓`);
           } catch (err) {
             toast(`Kunde angelegt, aber Website-Import fehlgeschlagen: ${err.message}`, true);
@@ -234,11 +277,12 @@
   const TABS = [
     ['einbau', 'Einbau'], ['wissen', 'Wissen'], ['anfragen', 'Anfragen'], ['fragen', 'Offene Fragen'],
     ['gespraeche', 'Gespräche'], ['einstellungen', 'Einstellungen'],
+    ...(IS_ADMIN ? [['zugaenge', 'Zugänge']] : []),
   ];
 
   async function openTenant(id, tab) {
     try {
-      state.current = await api(`/tenants/${id}`);
+      state.current = await api(T(id));
     } catch (err) { toast(err.message, true); return; }
     state.tab = tab || (state.current?.id === id ? state.tab : 'einbau');
     if (!TABS.some(([k]) => k === state.tab)) state.tab = 'einbau';
@@ -247,24 +291,25 @@
   }
 
   async function refreshCurrent() {
-    state.current = await api(`/tenants/${state.current.id}`);
+    state.current = await api(T(state.current));
     loadTenants();
   }
 
   function renderTenant() {
     const t = state.current;
     const listEntry = state.tenants.find((x) => x.id === t.id);
-    history.replaceState(null, '', `#kunde/${t.id}/${state.tab}`);
+    const newLeads = listEntry?.new_leads ?? t.newLeads;
+    history.replaceState(null, '', IS_ADMIN ? `#kunde/${t.id}/${state.tab}` : `#${state.tab}`);
     $('#main').innerHTML = `
       <div class="page-head">
         <div><h1>${esc(t.name)}</h1>
-          <div class="sub">${esc(industryLabel(t.industry))}${t.city ? `, ${esc(t.city)}` : ''} · ${esc(planLabel(t.plan))}${t.active ? '' : ' · <strong>pausiert</strong>'}</div></div>
+          <div class="sub">${esc(industryLabel(t.industry))}${t.city ? `, ${esc(t.city)}` : ''} · ${esc(IS_ADMIN ? planLabel(t.plan) : `Paket ${state.plans[t.plan]?.label || t.plan}`)}${t.active ? '' : ' · <strong>pausiert</strong>'}</div></div>
         <div class="copy-row">
           <button class="btn btn-secondary" type="button" id="test-chat">Chat testen</button>
           ${t.website ? `<a class="btn btn-secondary" href="${esc(t.website.startsWith('http') ? t.website : `https://${t.website}`)}" target="_blank" rel="noopener">Website öffnen</a>` : ''}
         </div>
       </div>
-      <div class="tabs" role="tablist">${TABS.map(([k, label]) => `<button type="button" role="tab" data-tab="${k}" aria-selected="${state.tab === k}">${label}${k === 'anfragen' && listEntry?.new_leads ? `<span class="count">${listEntry.new_leads}</span>` : ''}</button>`).join('')}</div>
+      <div class="tabs" role="tablist">${TABS.map(([k, label]) => `<button type="button" role="tab" data-tab="${k}" aria-selected="${state.tab === k}">${label}${k === 'anfragen' && newLeads ? `<span class="count">${newLeads}</span>` : ''}</button>`).join('')}</div>
       <div id="tab-body"></div>`;
     $('.tabs').addEventListener('click', (e) => {
       const b = e.target.closest('[data-tab]');
@@ -277,7 +322,7 @@
       window.EmpfangKI.use(t.public_key, { open: true });
     });
     const body = $('#tab-body');
-    ({ einbau: tabEinbau, wissen: tabWissen, anfragen: tabAnfragen, fragen: tabFragen, gespraeche: tabGespraeche, einstellungen: tabEinstellungen })[state.tab](body, t);
+    ({ einbau: tabEinbau, wissen: tabWissen, anfragen: tabAnfragen, fragen: tabFragen, gespraeche: tabGespraeche, einstellungen: tabEinstellungen, zugaenge: tabZugaenge })[state.tab](body, t);
   }
 
   // --- Einbau
@@ -290,7 +335,7 @@
       ${noKnowledge ? `<div class="panel" style="border-color:var(--messing);background:var(--warn-soft)"><strong>Noch kein Wissen hinterlegt.</strong> Der Assistent kann noch nichts beantworten. <button class="link-btn" type="button" id="go-wissen">Jetzt Website oder PDF einlesen</button></div>` : ''}
       <div class="panel">
         <h2>Code-Zeile für die Website</h2>
-        <p class="hint">Diese Zeile kommt vor das Ende von &lt;/body&gt; auf der Website des Kunden. Sie funktioniert nur auf den freigeschalteten Domains.</p>
+        <p class="hint">Diese Zeile kommt vor das Ende von &lt;/body&gt; auf ${IS_ADMIN ? 'der Website des Kunden' : 'Ihrer Website'}. Sie funktioniert nur auf den freigeschalteten Domains (siehe Einstellungen) und kann auf mehreren Websites eingebaut werden.</p>
         <div class="code" id="snippet">${esc(t.snippet)}</div>
         <div class="copy-row"><button class="btn btn-primary" type="button" id="copy-snippet">Code kopieren</button>
           <span class="hint">Freigeschaltet: ${t.allowed_origins.length ? t.allowed_origins.map(esc).join(', ') : '<strong>keine Domain</strong>, bitte unter Einstellungen eintragen'}</span></div>
@@ -314,7 +359,7 @@
           <div class="stat"><b>${fmtNum(used)}</b><span>von ${fmtNum(limit)} Gesprächen</span><div class="meter"><i style="width:${pct}%"></i></div></div>
           <div class="stat"><b>${fmtNum(t.usage?.messages)}</b><span>Antworten</span></div>
           <div class="stat"><b>${fmtNum(t.knowledge?.chunks)}</b><span>Wissensabschnitte</span></div>
-          <div class="stat"><b>${(((Number(t.usage?.input_tokens) || 0) * 1 + (Number(t.usage?.output_tokens) || 0) * 5 + (Number(t.usage?.cache_read_tokens) || 0) * 0.1) / 1e6).toFixed(2).replace('.', ',')} $</b><span>KI-Kosten (geschätzt)</span></div>
+          ${IS_ADMIN ? `<div class="stat"><b>${(((Number(t.usage?.input_tokens) || 0) * 1 + (Number(t.usage?.output_tokens) || 0) * 5 + (Number(t.usage?.cache_read_tokens) || 0) * 0.1) / 1e6).toFixed(2).replace('.', ',')} $</b><span>KI-Kosten (geschätzt)</span></div>` : ''}
         </div>
       </div>`;
     $('#copy-snippet').addEventListener('click', () => copy(t.snippet, 'Code kopiert'));
@@ -361,12 +406,12 @@
       ? t.sources.map((s) => `<div class="row source-row"><div><div class="row-title">${esc(sourceLabel(s.source))}</div><div class="row-meta">${s.chunks} Abschnitte · aktualisiert ${fmtDate(s.updated_at)}</div></div>
           <span class="row-meta">${fmtNum(s.tokens)} Tokens</span>
           <button class="btn btn-danger" type="button" data-del-source="${esc(s.source)}">Löschen</button></div>`).join('')
-      : '<div class="empty">Noch kein Wissen. Lies die Website ein oder lade ein PDF hoch.</div>';
+      : '<div class="empty">Noch kein Wissen. Lesen Sie die Website ein oder laden Sie ein PDF hoch.</div>';
     sources.addEventListener('click', async (e) => {
       const b = e.target.closest('[data-del-source]');
       if (!b || !confirm(`„${sourceLabel(b.dataset.delSource)}“ wirklich löschen?`)) return;
       await busy(b, async () => {
-        await api(`/tenants/${t.id}/knowledge/source/${encodeURIComponent(b.dataset.delSource)}`, { method: 'DELETE' });
+        await api(T(t) + `/knowledge/source/${encodeURIComponent(b.dataset.delSource)}`, { method: 'DELETE' });
         toast('Gelöscht');
         await refreshCurrent();
         renderTenant();
@@ -374,7 +419,7 @@
     });
 
     // Eigener Text vorbefüllen + alle Abschnitte
-    const chunks = await api(`/tenants/${t.id}/knowledge`).catch(() => []);
+    const chunks = await api(T(t) + `/knowledge`).catch(() => []);
     const manual = chunks.filter((c) => c.source === 'manual');
     if (manual.length) $('#m-text').value = manual.map((c) => `# ${c.title}\n${c.content}`).join('\n\n');
     $('#chunks').innerHTML = chunks.map((c) => `<div class="chunk"><div><strong>${esc(c.title)}</strong> <span class="row-meta">· ${esc(sourceLabel(c.source))}</span><pre>${esc(c.content)}</pre></div>
@@ -383,7 +428,7 @@
       const b = e.target.closest('[data-del-chunk]');
       if (!b) return;
       await busy(b, async () => {
-        await api(`/tenants/${t.id}/knowledge/${b.dataset.delChunk}`, { method: 'DELETE' });
+        await api(T(t) + `/knowledge/${b.dataset.delChunk}`, { method: 'DELETE' });
         b.closest('.chunk').remove();
         toast('Abschnitt gelöscht');
         refreshCurrent();
@@ -396,7 +441,7 @@
       $('#w-progress').classList.remove('hidden');
       $('#w-result').innerHTML = '';
       await busy($('#w-btn'), async () => {
-        const r = await api(`/tenants/${t.id}/import/website`, { method: 'POST', body: { url: $('#w-url').value.trim() } });
+        const r = await api(T(t) + `/import/website`, { method: 'POST', body: { url: $('#w-url').value.trim() } });
         toast(`${r.pages.length} Seiten eingelesen ✓`);
         await refreshCurrent();
         renderTenant();
@@ -423,7 +468,7 @@
             reader.readAsDataURL(file);
           });
           try {
-            const r = await api(`/tenants/${t.id}/import/pdf`, { method: 'POST', body: { filename: file.name, dataBase64 } });
+            const r = await api(T(t) + `/import/pdf`, { method: 'POST', body: { filename: file.name, dataBase64 } });
             toast(`${file.name}: ${r.pages} Seiten eingelesen ✓`);
           } catch (err) { toast(`${file.name}: ${err.message}`, true); }
         }
@@ -438,9 +483,9 @@
       const text = $('#m-text').value.trim();
       await busy($('#m-btn'), async () => {
         if (!text) {
-          await api(`/tenants/${t.id}/knowledge/source/manual`, { method: 'DELETE' });
+          await api(T(t) + `/knowledge/source/manual`, { method: 'DELETE' });
         } else {
-          await api(`/tenants/${t.id}/knowledge`, { method: 'PUT', body: { source: 'manual', title: 'Allgemein', text } });
+          await api(T(t) + `/knowledge`, { method: 'PUT', body: { source: 'manual', title: 'Allgemein', text } });
         }
         toast('Gespeichert ✓');
         await refreshCurrent();
@@ -452,7 +497,7 @@
   // --- Anfragen
   async function tabAnfragen(body, t) {
     body.innerHTML = '<div class="progress"><span class="spinner"></span>Lade Anfragen …</div>';
-    const leads = await api(`/tenants/${t.id}/leads`).catch((e) => { toast(e.message, true); return []; });
+    const leads = await api(T(t) + `/leads`).catch((e) => { toast(e.message, true); return []; });
     if (!leads.length) { body.innerHTML = '<div class="empty">Noch keine Anfragen. Sobald jemand im Chat eine Anfrage hinterlässt, erscheint sie hier und wird per E-Mail geschickt.</div>'; return; }
     body.innerHTML = `<div class="rows">${leads.map((l) => `
       <div class="row">
@@ -471,18 +516,18 @@
     body.addEventListener('change', async (e) => {
       const sel = e.target.closest('[data-lead]');
       if (!sel) return;
-      try { await api(`/leads/${sel.dataset.lead}`, { method: 'PATCH', body: { status: sel.value } }); toast('Status gespeichert'); loadTenants(); } catch (err) { toast(err.message, true); }
+      try { await api(T(t) + `/leads/${sel.dataset.lead}`, { method: 'PATCH', body: { status: sel.value } }); toast('Status gespeichert'); loadTenants(); } catch (err) { toast(err.message, true); }
     });
   }
 
   // --- Offene Fragen (Wissenslücken)
   async function tabFragen(body, t) {
     body.innerHTML = '<div class="progress"><span class="spinner"></span>Lade offene Fragen …</div>';
-    const items = await api(`/tenants/${t.id}/open-questions`).catch((e) => { toast(e.message, true); return []; });
+    const items = await api(T(t) + `/open-questions`).catch((e) => { toast(e.message, true); return []; });
     const open = items.filter((q) => q.status !== 'erledigt');
     const done = items.filter((q) => q.status === 'erledigt');
     body.innerHTML = `
-      <p class="hint" style="margin:0 0 14px">Diese Fragen konnte der Assistent nicht beantworten. Trag die Antwort ein: Ab dann weiß er es. Die Person hat ihre Kontaktdaten hinterlassen und wartet auf eine Rückmeldung.</p>
+      <p class="hint" style="margin:0 0 14px">Diese Fragen konnte der Assistent nicht beantworten. Tragen Sie die Antwort ein: Ab dann weiß er es. Die Person hat ihre Kontaktdaten hinterlassen und wartet auf eine Rückmeldung.</p>
       ${open.length ? `<div class="rows">${open.map((q) => `
         <div class="row" data-q="${q.id}">
           <div class="row-head"><span class="row-title">${esc(q.open_question)}</span><span class="row-meta">${fmtDate(q.created_at)}</span></div>
@@ -503,14 +548,14 @@
         const answer = $(`#a-${q.id}`).value.trim();
         if (!answer) return toast('Bitte zuerst eine Antwort eintragen.', true);
         await busy(a, async () => {
-          await api(`/tenants/${t.id}/faq`, { method: 'POST', body: { question: q.open_question, answer, leadId: q.id } });
+          await api(T(t) + `/faq`, { method: 'POST', body: { question: q.open_question, answer, leadId: q.id } });
           toast('Antwort gespeichert. Der Assistent weiß es ab jetzt ✓');
           await refreshCurrent();
           renderTenant();
         });
       } else if (s) {
         await busy(s, async () => {
-          await api(`/leads/${s.dataset.skip}`, { method: 'PATCH', body: { status: 'erledigt' } });
+          await api(T(t) + `/leads/${s.dataset.skip}`, { method: 'PATCH', body: { status: 'erledigt' } });
           renderTenant();
         });
       }
@@ -520,7 +565,7 @@
   // --- Gespräche
   async function tabGespraeche(body, t) {
     body.innerHTML = '<div class="progress"><span class="spinner"></span>Lade Gespräche …</div>';
-    const convs = await api(`/tenants/${t.id}/conversations`).catch((e) => { toast(e.message, true); return []; });
+    const convs = await api(T(t) + `/conversations`).catch((e) => { toast(e.message, true); return []; });
     body.innerHTML = `<p class="hint" style="margin:0 0 14px">Die letzten 50 Gespräche. Gespräche werden nach der eingestellten Frist automatisch gelöscht.</p>` + (convs.length
       ? `<div class="rows">${convs.map((c) => {
           const first = c.messages?.find((m) => m.role === 'user')?.content || '';
@@ -539,14 +584,14 @@
           <h2>Betrieb</h2>
           <div class="grid-2" style="margin-top:14px">
             <div class="field"><label for="s-name">Name</label><input id="s-name" type="text" value="${esc(t.name)}" required></div>
-            <div class="field"><label for="s-industry">Branche</label><select id="s-industry">${industryOptions(t.industry)}</select></div>
+            ${IS_ADMIN ? `<div class="field"><label for="s-industry">Branche</label><select id="s-industry">${industryOptions(t.industry)}</select></div>` : ''}
             <div class="field"><label for="s-website">Website</label><input id="s-website" type="text" value="${esc(t.website || '')}"></div>
             <div class="field"><label for="s-city">Stadt</label><input id="s-city" type="text" value="${esc(t.city || '')}"></div>
             <div class="field"><label for="s-email">E-Mail für Anfragen</label><input id="s-email" type="email" value="${esc(t.contact_email || '')}"></div>
             <div class="field"><label for="s-phone">Telefon</label><input id="s-phone" type="tel" value="${esc(t.phone || '')}"></div>
-            <div class="field"><label for="s-plan">Paket</label><select id="s-plan">${planOptions(t.plan)}</select></div>
+            ${IS_ADMIN ? `<div class="field"><label for="s-plan">Paket</label><select id="s-plan">${planOptions(t.plan)}</select></div>` : `<div class="field"><label>Paket</label><p style="margin:6px 0 0">${esc(planLabel(t.plan))}</p><p class="hint">Paket ändern oder kündigen: <a href="mailto:support@pdf-libre.de">support@pdf-libre.de</a></p></div>`}
             <div class="field"><label for="s-origins">Freigeschaltete Domains</label><input id="s-origins" type="text" value="${esc(t.allowed_origins.map((o) => o.replace(/^https?:\/\//, '')).filter((o, i, a) => !(o.startsWith('www.') && a.includes(o.slice(4)))).join(', '))}" placeholder="beispiel.de, shop.beispiel.de">
-              <p class="hint">Durch Komma getrennt. „www.“ wird automatisch ergänzt.</p></div>
+              <p class="hint">Auf diesen Websites darf der Chat laufen. Mehrere durch Komma trennen, „www.“ wird automatisch ergänzt.</p></div>
           </div>
         </div>
         <div class="panel">
@@ -559,14 +604,14 @@
           <div class="field"><label for="s-quick">Schnellantworten (eine pro Zeile, max. 4)</label><textarea id="s-quick" rows="3" placeholder="Leer lassen für die Standard-Vorschläge der Branche">${esc((s.quickReplies || []).join('\n'))}</textarea></div>
           <div class="grid-2">
             <div class="field"><label for="s-booking">Online-Buchungslink</label><input id="s-booking" type="url" value="${esc(s.bookingUrl || '')}" placeholder="https://…"></div>
-            <div class="field"><label for="s-privacy">Link zur Datenschutzerklärung des Kunden</label><input id="s-privacy" type="url" value="${esc(s.privacyUrl || '')}" placeholder="https://…/datenschutz"></div>
+            <div class="field"><label for="s-privacy">Link zu ${IS_ADMIN ? 'seiner' : 'Ihrer'} Datenschutzerklärung</label><input id="s-privacy" type="url" value="${esc(s.privacyUrl || '')}" placeholder="https://…/datenschutz"></div>
           </div>
           <div class="field"><label for="s-extra">Zusätzliche Anweisungen an den Assistenten</label><textarea id="s-extra" rows="3" placeholder="z. B. „Wir nehmen keine Aufträge unter 500 € an.“ oder „Immer auf den Notdienst hinweisen.“">${esc(s.extraInstructions || '')}</textarea></div>
         </div>
-        <div class="panel">
+${IS_ADMIN ? `        <div class="panel">
           <h2>Status</h2>
           <label class="check" style="margin-top:10px"><input id="s-active" type="checkbox" ${t.active ? 'checked' : ''}> Assistent ist aktiv (aus = Widget erscheint nicht mehr, z. B. bei Kündigung)</label>
-        </div>
+        </div>` : ''}
         <button class="btn btn-primary" type="submit" id="s-btn">Einstellungen speichern</button>
       </form>`;
     $('#s-form').addEventListener('submit', async (e) => {
@@ -584,19 +629,17 @@
       };
       Object.keys(settings).forEach((k) => settings[k] === undefined && delete settings[k]);
       await busy($('#s-btn'), async () => {
-        await api(`/tenants/${t.id}`, {
+        await api(T(t), {
           method: 'PATCH',
           body: {
             name: $('#s-name').value.trim(),
-            industry: $('#s-industry').value,
             website: $('#s-website').value.trim(),
             city: $('#s-city').value.trim(),
             contactEmail: $('#s-email').value.trim(),
             phone: $('#s-phone').value.trim(),
-            plan: $('#s-plan').value,
             allowedOrigins: $('#s-origins').value.split(',').map((x) => x.trim()).filter(Boolean),
-            active: $('#s-active').checked,
             settings,
+            ...(IS_ADMIN ? { industry: $('#s-industry').value, plan: $('#s-plan').value, active: $('#s-active').checked } : {}),
           },
         });
         toast('Gespeichert ✓');
@@ -606,6 +649,69 @@
     });
   }
 
+  // --- Zugänge (nur Admin): wer darf sich ins Kunden-Dashboard einloggen?
+  async function tabZugaenge(body, t) {
+    body.innerHTML = '<div class="progress"><span class="spinner"></span>Lade Zugänge …</div>';
+    const users = await api(T(t) + '/users').catch((e) => { toast(e.message, true); return []; });
+    const loginUrl = `${state.me.publicUrl}/app/`;
+    body.innerHTML = `
+      <div class="panel">
+        <h2>Kunden-Dashboard</h2>
+        <p class="hint">Der Kunde meldet sich unter <a href="${esc(loginUrl)}" target="_blank" rel="noopener">${esc(loginUrl)}</a> mit seiner E-Mail-Adresse an und bekommt einen Anmeldelink per Mail, ganz ohne Passwort. Dort kann er Wissen pflegen, Anfragen und offene Fragen bearbeiten, Gespräche sehen und Einstellungen ändern.</p>
+        <form id="u-form" class="copy-row" style="margin-top:12px">
+          <input id="u-email" type="email" required placeholder="E-Mail-Adresse des Kunden" value="${users.length ? '' : esc(t.contact_email || '')}" style="flex:1;min-width:220px">
+          <input id="u-name" type="text" placeholder="Name (optional)" style="width:200px">
+          <button class="btn btn-primary" type="submit" id="u-btn">Zugang anlegen und Link senden</button>
+        </form>
+        <div id="u-link"></div>
+      </div>
+      <div class="panel">
+        <h2>Zugänge</h2>
+        <div class="rows" style="margin-top:10px">${users.length ? users.map((u) => `
+          <div class="row source-row">
+            <div><div class="row-title">${esc(u.email)}</div><div class="row-meta">${u.name ? `${esc(u.name)} · ` : ''}${u.last_login_at ? `zuletzt angemeldet ${fmtDate(u.last_login_at)}` : 'noch nie angemeldet'}</div></div>
+            <button class="btn btn-secondary" type="button" data-link="${u.id}">Login-Link senden</button>
+            <button class="btn btn-danger" type="button" data-del-user="${u.id}">Entfernen</button>
+          </div>`).join('') : '<div class="empty">Noch kein Zugang. Legen Sie oben einen an, z. B. mit der E-Mail des Inhabers.</div>'}</div>
+      </div>`;
+
+    const showLink = (r) => {
+      $('#u-link').innerHTML = `<p class="hint" style="margin-top:12px">${r.mailSent ? 'Login-Mail wurde verschickt ✓.' : '<strong>E-Mail konnte nicht verschickt werden</strong> (SMTP nicht eingerichtet?).'} Sie können den Link auch direkt weitergeben, z. B. per WhatsApp. Er ist 30 Minuten gültig und funktioniert einmal:</p>
+        <div class="code">${esc(r.loginUrl)}</div><button class="btn btn-secondary" type="button" id="u-copy">Link kopieren</button>`;
+      $('#u-copy').addEventListener('click', () => copy(r.loginUrl, 'Login-Link kopiert'));
+    };
+
+    $('#u-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      await busy($('#u-btn'), async () => {
+        const r = await api(T(t) + '/users', { method: 'POST', body: { email: $('#u-email').value.trim(), name: $('#u-name').value.trim() } });
+        toast('Zugang angelegt ✓');
+        await tabZugaenge(body, t);
+        showLink(r);
+      });
+    });
+    body.querySelectorAll('[data-link]').forEach((b) => b.addEventListener('click', () => busy(b, async () => {
+      const r = await api(T(t) + `/users/${b.dataset.link}/login-link`, { method: 'POST' });
+      showLink(r);
+      toast(r.mailSent ? 'Login-Mail verschickt ✓' : 'Link erstellt');
+    })));
+    body.querySelectorAll('[data-del-user]').forEach((b) => b.addEventListener('click', () => {
+      if (!confirm('Diesen Zugang entfernen? Die Person kann sich danach nicht mehr anmelden.')) return;
+      busy(b, async () => {
+        await api(T(t) + `/users/${b.dataset.delUser}`, { method: 'DELETE' });
+        toast('Zugang entfernt');
+        tabZugaenge(body, t);
+      });
+    }));
+  }
+
   // ------------------------------------------------------------ Los geht's
-  if (token) start(); else showLogin();
+  if (IS_ADMIN) {
+    if (token) start(); else showLogin();
+  } else {
+    if (new URLSearchParams(location.search).get('login') === 'abgelaufen') {
+      history.replaceState(null, '', location.pathname);
+      showLogin('Dieser Anmeldelink ist abgelaufen oder wurde schon benutzt. Fordern Sie einfach einen neuen an.');
+    } else start();
+  }
 })();

@@ -150,3 +150,9 @@ details summary { cursor: pointer; font-weight: 600; }
   .grid-2 { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+
+/* Kunden-Dashboard: ohne Seitenleiste, Inhalt zentriert */
+body[data-mode="portal"] .app { grid-template-columns: 1fr; }
+body[data-mode="portal"] .main { margin: 0 auto; width: 100%; }
+.badge.neutral { background: var(--putz); color: var(--ink-soft); font-weight: 500; }
+#login-sent h1 { font-size: 22px; margin: 18px 0 10px; }

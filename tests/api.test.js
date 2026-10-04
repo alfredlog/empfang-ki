@@ -152,3 +152,79 @@ test('FAQ-Antwort ergänzt das Wissen und erscheint in den Quellen', opts, async
   assert.ok(sources.includes('faq') && sources.includes('website') && sources.includes('pdf:Preisliste 2026.pdf'), sources.join());
   await query('DELETE FROM tenants WHERE id = $1', [adminTenant.id]);
 });
+
+// ---------------------------------------------------------------- Kunden-Dashboard: Login & Mandantentrennung
+test('Kunden-Login per Magic Link und Zugriff nur auf den eigenen Betrieb', opts, async () => {
+  const { config } = await import('../server/src/config.js');
+  const origin = { Origin: config.publicUrl, 'Content-Type': 'application/json' };
+  const mk = async (name) => (await (await fetch(`${base}/api/admin/tenants`, {
+    method: 'POST', headers: admin, body: JSON.stringify({ name, industry: 'kosmetik', website: `${name.toLowerCase().replace(/\W+/g, '')}.de` }),
+  })).json());
+  const a = await mk(`Studio A ${Date.now()}`);
+  const b = await mk(`Studio B ${Date.now()}`);
+  await query(`INSERT INTO leads (tenant_id, kind, name, summary) VALUES ($1, 'termin', 'Fremde Anfrage', 'gehört B')`, [b.id]);
+  const foreignLead = (await query('SELECT id FROM leads WHERE tenant_id = $1', [b.id])).rows[0].id;
+
+  try {
+    // Ohne Sitzung: kein Zugriff
+    assert.equal((await fetch(`${base}/api/portal/tenant`)).status, 401);
+
+    // Admin legt Zugang an → Login-Link
+    const created = await (await fetch(`${base}/api/admin/tenants/${a.id}/users`, {
+      method: 'POST', headers: admin, body: JSON.stringify({ email: 'Chefin@Studio-A.de' }),
+    })).json();
+    assert.equal(created.user.email, 'chefin@studio-a.de');
+    assert.match(created.loginUrl, /\/login\/verify\?token=/);
+
+    // Link einlösen → Cookie
+    const verify = await fetch(created.loginUrl.replace(config.publicUrl, base), { redirect: 'manual' });
+    assert.equal(verify.status, 303);
+    assert.equal(verify.headers.get('location'), '/app/');
+    const cookie = verify.headers.get('set-cookie').split(';')[0];
+    assert.match(cookie, /^ek_session=/);
+
+    // Link ist nur einmal gültig
+    const again = await fetch(created.loginUrl.replace(config.publicUrl, base), { redirect: 'manual' });
+    assert.equal(again.headers.get('location'), '/app/?login=abgelaufen');
+
+    const auth = { Cookie: cookie, ...origin };
+    const me = await (await fetch(`${base}/api/portal/me`, { headers: auth })).json();
+    assert.equal(me.tenantId, a.id);
+    const t = await (await fetch(`${base}/api/portal/tenant`, { headers: auth })).json();
+    assert.equal(t.id, a.id);
+
+    // Fremde Anfrage kann nicht geändert werden
+    const patch = await fetch(`${base}/api/portal/tenant/leads/${foreignLead}`, { method: 'PATCH', headers: auth, body: JSON.stringify({ status: 'erledigt' }) });
+    assert.equal(patch.status, 404);
+    const leads = await (await fetch(`${base}/api/portal/tenant/leads`, { headers: auth })).json();
+    assert.equal(leads.length, 0);
+
+    // Kunde darf Paket/Status nicht ändern, aber Domains und Begrüßung
+    const upd = await (await fetch(`${base}/api/portal/tenant`, {
+      method: 'PATCH', headers: auth,
+      body: JSON.stringify({ plan: 'pro', active: false, allowedOrigins: ['studio-a.de', 'shop.studio-a.de'], settings: { greeting: 'Hallo!', internal: 'x' } }),
+    })).json();
+    assert.equal(upd.plan, 'starter');
+    assert.equal(upd.active, true);
+    assert.ok(upd.allowed_origins.includes('https://shop.studio-a.de'));
+    assert.equal(upd.settings.greeting, 'Hallo!');
+    assert.equal(upd.settings.internal, undefined);
+
+    // Admin-API bleibt für Kunden gesperrt
+    assert.equal((await fetch(`${base}/api/admin/tenants`, { headers: { Cookie: cookie } })).status, 401);
+
+    // Fremde Herkunft (CSRF) wird abgewiesen
+    const csrf = await fetch(`${base}/api/portal/tenant`, { method: 'PATCH', headers: { Cookie: cookie, Origin: 'https://evil.example', 'Content-Type': 'application/json' }, body: '{"name":"Hack"}' });
+    assert.equal(csrf.status, 403);
+
+    // Abmelden beendet die Sitzung
+    await fetch(`${base}/api/portal/logout`, { method: 'POST', headers: auth });
+    assert.equal((await fetch(`${base}/api/portal/tenant`, { headers: auth })).status, 401);
+
+    // Login-Anfrage verrät nicht, ob es die Adresse gibt
+    const unknown = await (await fetch(`${base}/api/portal/login`, { method: 'POST', headers: origin, body: JSON.stringify({ email: 'gibtsnicht@example.de' }) })).json();
+    assert.deepEqual(unknown, { ok: true });
+  } finally {
+    await query('DELETE FROM tenants WHERE id = ANY($1)', [[a.id, b.id]]);
+  }
+});

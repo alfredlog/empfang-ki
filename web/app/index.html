@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Dashboard – Empfang KI</title>
+  <link rel="stylesheet" href="/assets/fonts.css">
+  <link rel="stylesheet" href="/admin/admin.css">
+</head>
+<body data-mode="portal">
+  <!-- Anmeldung per Magic Link -->
+  <main id="login" class="login hidden">
+    <div class="login-card">
+      <div class="brand"><span class="brand-bell" aria-hidden="true"></span>Empfang KI</div>
+      <form id="login-form">
+        <h1>Anmelden</h1>
+        <p class="hint" style="margin:-8px 0 18px">Geben Sie Ihre E-Mail-Adresse ein. Sie bekommen einen Link, mit dem Sie sich ohne Passwort anmelden.</p>
+        <label for="email">E-Mail-Adresse</label>
+        <input id="email" type="email" autocomplete="email" required placeholder="info@ihr-betrieb.de">
+        <p id="login-error" class="error hidden" role="alert"></p>
+        <button class="btn btn-primary" type="submit">Anmeldelink senden</button>
+      </form>
+      <div id="login-sent" class="hidden" role="status">
+        <h1>Bitte prüfen Sie Ihr Postfach</h1>
+        <p>Falls <strong id="login-sent-mail"></strong> für ein Dashboard freigeschaltet ist, haben wir Ihnen gerade einen Anmeldelink geschickt. Er ist 30 Minuten gültig.</p>
+        <p class="hint">Keine E-Mail bekommen? Schauen Sie im Spam-Ordner nach oder <button id="login-again" class="link-btn" type="button">versuchen Sie es erneut</button>. Hilfe: <a href="mailto:support@pdf-libre.de">support@pdf-libre.de</a></p>
+      </div>
+    </div>
+  </main>
+
+  <div id="app" class="app hidden">
+    <header class="topbar">
+      <a class="brand" href="/app/"><span class="brand-bell" aria-hidden="true"></span>Empfang KI <span class="muted">Dashboard</span></a>
+      <div class="topbar-right">
+        <span id="llm-badge" class="badge"></span>
+        <a href="mailto:support@pdf-libre.de">Hilfe</a>
+        <button id="logout" class="link-btn" type="button">Abmelden</button>
+      </div>
+    </header>
+    <main id="main" class="main" tabindex="-1"></main>
+  </div>
+
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+  <script src="/admin/admin.js" defer></script>
+  <script src="/widget.js" defer></script>
+</body>
+</html>

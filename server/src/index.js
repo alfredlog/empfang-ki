@@ -2,6 +2,7 @@ import { createApp } from './app.js';
 import { config } from './config.js';
 import { migrate } from './db/migrate.js';
 import { pool } from './db/pool.js';
+import { purgeExpiredAuth } from './services/auth.js';
 import { purgeOldConversations } from './services/chat.js';
 
 await migrate();
@@ -16,6 +17,7 @@ const purge = async () => {
   try {
     const n = await purgeOldConversations();
     if (n) console.log(`[retention] ${n} alte Gespräche gelöscht`);
+    await purgeExpiredAuth();
   } catch (err) {
     console.error('[retention]', err.message);
   }

@@ -15,6 +15,17 @@ function getTransport() {
   return transport;
 }
 
+/** Allgemeiner Mailversand. Ohne SMTP-Konfiguration wird nur geloggt. */
+export async function sendMail({ to, subject, text, html, replyTo }) {
+  const t = getTransport();
+  if (!t || !to) {
+    console.log(`[mail:dry-run] an ${to || '(keine Adresse)'} – ${subject}`);
+    return { sent: false };
+  }
+  await t.sendMail({ from: config.mail.from, to, replyTo: replyTo || undefined, subject, text, html });
+  return { sent: true };
+}
+
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 const KIND_LABEL = {
@@ -38,26 +49,15 @@ export async function sendLeadEmail(tenant, lead) {
     ...Object.entries(lead.details || {}).map(([k, v]) => [k, v]),
   ].filter(([, v]) => v);
 
-  const text = `${subject}\n\n${rows.map(([k, v]) => `${k}: ${v}`).join('\n')}\n\nBitte melden Sie sich zeitnah bei der Person zurück.`;
+  const dashboardUrl = `${config.publicUrl}/app/#anfragen`;
+  const text = `${subject}\n\n${rows.map(([k, v]) => `${k}: ${v}`).join('\n')}\n\nBitte melden Sie sich zeitnah bei der Person zurück.\nAlle Anfragen im Dashboard: ${dashboardUrl}`;
   const html = `<div style="font-family:system-ui,sans-serif;max-width:560px">
     <h2 style="margin:0 0 12px">${esc(subject)}</h2>
     <table style="border-collapse:collapse;width:100%">${rows
       .map(([k, v]) => `<tr><td style="padding:6px 12px 6px 0;color:#666;vertical-align:top;white-space:nowrap">${esc(k)}</td><td style="padding:6px 0">${esc(v)}</td></tr>`)
       .join('')}</table>
-    <p style="color:#666;font-size:13px;margin-top:20px">Diese Anfrage wurde vom KI-Assistenten auf Ihrer Website aufgenommen.</p></div>`;
+    <p style="margin-top:20px"><a href="${dashboardUrl}" style="display:inline-block;background:#0e5e63;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">Im Dashboard ansehen</a></p>
+    <p style="color:#666;font-size:13px;margin-top:16px">Diese Anfrage wurde vom KI-Assistenten auf Ihrer Website aufgenommen.</p></div>`;
 
-  const t = getTransport();
-  if (!t || !tenant.contact_email) {
-    console.log(`[mail:dry-run] an ${tenant.contact_email || '(keine Adresse)'} – ${subject}`);
-    return { sent: false };
-  }
-  await t.sendMail({
-    from: config.mail.from,
-    to: tenant.contact_email,
-    replyTo: lead.email || undefined,
-    subject,
-    text,
-    html,
-  });
-  return { sent: true };
+  return sendMail({ to: tenant.contact_email, replyTo: lead.email, subject, text, html });
 }

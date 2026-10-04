@@ -38,7 +38,10 @@ server/src/
   config.js                 Konfiguration aus Umgebungsvariablen
   db/                       Pool, Migrations-Runner, SQL-Migrationen
   routes/public.js          Widget-Config, Chat (SSE), gehostete Chat-Seite
-  routes/admin.js           Kunden, Wissensbasis, Anfragen, offene Fragen, Gespräche
+  routes/admin.js           Admin: Kundenliste, Neuanlage
+  routes/portal.js          Kunden-Dashboard: Magic-Link-Login, Sitzung
+  routes/tenant-scope.js    Alles zu einem Kunden (von Admin und Dashboard genutzt)
+  services/auth.js          Magic Links, Sitzungen, Zugänge
   services/chat.js          Chat-Turn: Notfall-Check → Retrieval → LLM → Tool-Use → Speichern
   services/knowledge.js     Chunking, Speicherung, Retrieval
   services/llm.js           Anthropic-Streaming + Mock
@@ -98,11 +101,18 @@ Unter **`/admin`** mit dem `ADMIN_TOKEN` anmelden:
 4. Mit **Chat testen** den Assistenten direkt im Admin ausprobieren.
 5. **Anfragen** und **Offene Fragen** bearbeiten. Mit „Antwort hinzufügen“ lernt der Assistent fehlende Antworten dazu.
 
-Die Admin-API (`/api/admin/*`, Bearer-Token) kann auch direkt genutzt werden, siehe `server/src/routes/admin.js`.
+6. Im Tab **Zugänge** einen Zugang für den Kunden anlegen. Er bekommt einen Anmeldelink per Mail (der Link lässt sich auch kopieren, z. B. für WhatsApp).
+
+## Kunden-Dashboard
+
+Kunden melden sich unter **`/app`** mit ihrer E-Mail-Adresse an (Magic Link, kein Passwort, Sitzung 30 Tage). Jede Anfrage-Mail enthält zusätzlich einen Button „Im Dashboard ansehen“.
+
+Im Dashboard können Kunden selbst: Wissen pflegen (Website-Import, PDFs, eigener Text), die Code-Zeile holen und weitere Domains freischalten, Anfragen und offene Fragen bearbeiten, Gespräche ansehen und Begrüßung, Farbe, Schnellantworten usw. ändern. Paket, Branche und Aktiv-Status bleiben beim Admin.
+
+Technisch nutzen Admin (`/api/admin/tenants/:id/*`) und Dashboard (`/api/portal/tenant/*`) dieselben Routen (`server/src/routes/tenant-scope.js`). Im Dashboard kommt die Kunden-ID ausschließlich aus der Sitzung, jede Abfrage filtert danach. Ändernde Anfragen sind per Origin-Prüfung gegen CSRF geschützt.
 
 ## Roadmap
 
-- Eigener Login für Kunden (eigene Anfragen und offene Fragen sehen)
 - Stripe-Abos für die Pakete
 - Benachrichtigung zusätzlich per SMS/WhatsApp
 - Optional semantische Suche mit Embeddings (pgvector)
