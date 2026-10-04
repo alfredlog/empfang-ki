@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
   <title>Admin – Empfang KI</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <link rel="stylesheet" href="/assets/fonts.css">
   <link rel="stylesheet" href="/admin/admin.css">
 </head>
@@ -12,7 +15,7 @@
   <!-- Anmeldung -->
   <main id="login" class="login hidden">
     <form id="login-form" class="login-card">
-      <div class="brand"><span class="brand-bell" aria-hidden="true"></span>Empfang KI</div>
+      <div class="brand"><img class="brand-mark" src="/assets/brand/logo-symbol.svg" alt="" width="30" height="30">Empfang KI</div>
       <h1>Admin-Bereich</h1>
       <label for="token">Admin-Passwort</label>
       <input id="token" type="password" autocomplete="current-password" required placeholder="ADMIN_TOKEN aus der .env">
@@ -24,7 +27,7 @@
   <!-- App -->
   <div id="app" class="app hidden">
     <header class="topbar">
-      <a class="brand" href="/admin/"><span class="brand-bell" aria-hidden="true"></span>Empfang KI <span class="muted">Admin</span></a>
+      <a class="brand" href="/admin/"><img class="brand-mark" src="/assets/brand/logo-symbol.svg" alt="" width="30" height="30">Empfang KI <span class="muted">Admin</span></a>
       <div class="topbar-right">
         <span id="llm-badge" class="badge"></span>
         <a href="/" target="_blank" rel="noopener">Website</a>

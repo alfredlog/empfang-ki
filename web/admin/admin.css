@@ -173,3 +173,5 @@ body[data-mode="portal"] .main { margin: 0 auto; width: 100%; }
 .price-sm { font-size: 18px; font-weight: 700; }
 code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; background: var(--putz); padding: 1px 5px; border-radius: 4px; }
 @media (max-width: 860px) { .plans-pick { grid-template-columns: 1fr; } }
+
+.brand-mark { width: 26px; height: 26px; display: block; flex: none; }
