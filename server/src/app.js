@@ -6,6 +6,7 @@ import { ZodError } from 'zod';
 import { pool } from './db/pool.js';
 import { adminRouter } from './routes/admin.js';
 import { portalRouter } from './routes/portal.js';
+import { stripeRouter } from './routes/stripe.js';
 import { SESSION_COOKIE, sessionCookieOptions, verifyLoginToken } from './services/auth.js';
 import { publicRouter } from './routes/public.js';
 
@@ -34,6 +35,8 @@ export function createApp() {
       },
     }),
   );
+  // Stripe-Webhook vor allen JSON-Parsern (braucht den Roh-Body für die Signatur)
+  app.use('/api/stripe', stripeRouter);
   // Admin-API zuerst einbinden: braucht ein höheres Limit für PDF-Uploads
   app.use('/api/admin', express.json({ limit: '30mb' }), adminRouter);
   app.use('/api/portal', express.json({ limit: '30mb' }), portalRouter);

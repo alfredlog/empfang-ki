@@ -156,3 +156,20 @@ body[data-mode="portal"] .app { grid-template-columns: 1fr; }
 body[data-mode="portal"] .main { margin: 0 auto; width: 100%; }
 .badge.neutral { background: var(--putz); color: var(--ink-soft); font-weight: 500; }
 #login-sent h1 { font-size: 22px; margin: 18px 0 10px; }
+
+/* Abrechnung */
+.banner { padding: 12px 16px; border-radius: 10px; margin: -4px 0 18px; font-size: 14.5px; }
+.banner.bad { background: var(--danger-soft); border: 1px solid #efc4c0; }
+.banner.warn { background: var(--warn-soft); border: 1px solid #ecd9a8; }
+.badge.bad { background: var(--danger-soft); color: var(--danger); }
+.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); margin-right: 6px; vertical-align: 1px; }
+.dot.ok { background: var(--ok); }
+.dot.warn { background: #c48a00; }
+.dot.bad { background: var(--danger); }
+.plans-pick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; }
+.plan-pick { display: flex; gap: 10px; align-items: flex-start; padding: 14px; border: 1.5px solid var(--line); border-radius: 10px; background: var(--white); cursor: pointer; font-weight: 400; }
+.plan-pick:has(input:checked) { border-color: var(--petrol); box-shadow: 0 0 0 3px var(--petrol-soft); }
+.plan-pick > span { display: grid; gap: 2px; }
+.price-sm { font-size: 18px; font-weight: 700; }
+code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; background: var(--putz); padding: 1px 5px; border-radius: 4px; }
+@media (max-width: 860px) { .plans-pick { grid-template-columns: 1fr; } }

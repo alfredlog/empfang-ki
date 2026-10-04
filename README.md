@@ -42,6 +42,8 @@ server/src/
   routes/portal.js          Kunden-Dashboard: Magic-Link-Login, Sitzung
   routes/tenant-scope.js    Alles zu einem Kunden (von Admin und Dashboard genutzt)
   services/auth.js          Magic Links, Sitzungen, Zugänge
+  services/billing.js       Testphase, manuelle Zahlung, Stripe Checkout/Portal/Webhook
+  routes/stripe.js          Stripe-Webhook (Signaturprüfung, idempotent)
   services/chat.js          Chat-Turn: Notfall-Check → Retrieval → LLM → Tool-Use → Speichern
   services/knowledge.js     Chunking, Speicherung, Retrieval
   services/llm.js           Anthropic-Streaming + Mock
@@ -111,9 +113,25 @@ Im Dashboard können Kunden selbst: Wissen pflegen (Website-Import, PDFs, eigene
 
 Technisch nutzen Admin (`/api/admin/tenants/:id/*`) und Dashboard (`/api/portal/tenant/*`) dieselben Routen (`server/src/routes/tenant-scope.js`). Im Dashboard kommt die Kunden-ID ausschließlich aus der Sitzung, jede Abfrage filtert danach. Ändernde Anfragen sind per Origin-Prüfung gegen CSRF geschützt.
 
+## Abrechnung
+
+Zwei Wege, einen Kunden einzuschalten (Tab **Abrechnung** im Admin):
+
+- **Manuell:** Kunde zahlt per Überweisung oder bar → „Als bezahlt markieren“ (1–12 Monate). Der Assistent ist sofort an, „bezahlt bis“ wird gespeichert. Überfällige Kunden sind in der Liste markiert.
+- **Stripe:** „Zahlungslink erstellen“ im Admin oder „Abo abschließen“ im Kunden-Dashboard → Stripe Checkout. Der Webhook schaltet nach der Zahlung automatisch ein und bei Kündigung oder Zahlungsausfall automatisch aus. Kunden verwalten ihr Abo (Rechnungen, Zahlungsart, Kündigung) im Stripe-Kundenportal.
+
+Neue Kunden starten in einer Testphase (`TRIAL_DAYS`, Standard 14 Tage). Läuft sie ohne Zahlung ab, wird der Assistent automatisch ausgeschaltet. Alle Änderungen landen im Zahlungsverlauf.
+
+### Stripe einrichten
+
+1. **Produkte:** Im Stripe-Dashboard unter *Produktkatalog* drei Produkte mit **monatlichem** Preis anlegen (Starter 29 €, Business 59 €, Pro 99 €) und die Preis-IDs (`price_…`) in `STRIPE_PRICE_STARTER/BUSINESS/PRO` eintragen.
+2. **API-Schlüssel:** *Entwickler → API-Schlüssel* → geheimen Schlüssel in `STRIPE_SECRET_KEY` (zum Testen zuerst `sk_test_…`).
+3. **Webhook:** *Entwickler → Webhooks → Endpunkt hinzufügen*, URL `https://chatbot.pdf-libre.de/api/stripe/webhook`, Events: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`, `invoice.payment_failed`. Das Signatur-Geheimnis (`whsec_…`) in `STRIPE_WEBHOOK_SECRET`.
+4. **Kundenportal:** *Einstellungen → Billing → Kundenportal* aktivieren (Rechnungen, Zahlungsmethode, Kündigung).
+5. App neu starten. Im Testmodus mit der Testkarte `4242 4242 4242 4242` ausprobieren.
+
 ## Roadmap
 
-- Stripe-Abos für die Pakete
 - Benachrichtigung zusätzlich per SMS/WhatsApp
 - Optional semantische Suche mit Embeddings (pgvector)
 

@@ -3,6 +3,7 @@ import { config } from './config.js';
 import { migrate } from './db/migrate.js';
 import { pool } from './db/pool.js';
 import { purgeExpiredAuth } from './services/auth.js';
+import { expireTrials } from './services/billing.js';
 import { purgeOldConversations } from './services/chat.js';
 
 await migrate();
@@ -18,12 +19,14 @@ const purge = async () => {
     const n = await purgeOldConversations();
     if (n) console.log(`[retention] ${n} alte Gespräche gelöscht`);
     await purgeExpiredAuth();
+    const expired = await expireTrials();
+    if (expired) console.log(`[billing] ${expired} Testphase(n) abgelaufen – Assistent ausgeschaltet`);
   } catch (err) {
     console.error('[retention]', err.message);
   }
 };
 purge();
-const timer = setInterval(purge, 24 * 60 * 60 * 1000);
+const timer = setInterval(purge, 60 * 60 * 1000); // stündlich
 
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, () => {

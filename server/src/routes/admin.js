@@ -6,7 +6,9 @@ import { z } from 'zod';
 import { config } from '../config.js';
 import { query } from '../db/pool.js';
 import { requireAdmin } from '../middleware/security.js';
+import { logBillingEvent } from '../services/billing.js';
 import { normalizeUrl } from '../services/importers.js';
+import { pool } from '../db/pool.js';
 import { PLANS, newPublicKey, normalizeOrigins } from '../services/tenants.js';
 import { listIndustries } from '../templates/industries.js';
 import { buildTenantRouter, embedInfo, tenantFields } from './tenant-scope.js';
@@ -52,7 +54,8 @@ adminRouter.get('/tenants', asyncRoute(async (req, res) => {
     `SELECT t.id, t.slug, t.name, t.industry, t.city, t.plan, t.active, t.created_at,
             coalesce(u.conversations, 0) AS conversations_month,
             (SELECT count(*)::int FROM leads l WHERE l.tenant_id = t.id AND l.status = 'neu') AS new_leads,
-            (SELECT coalesce(sum(tokens), 0)::int FROM knowledge_chunks k WHERE k.tenant_id = t.id) AS knowledge_tokens
+            (SELECT coalesce(sum(tokens), 0)::int FROM knowledge_chunks k WHERE k.tenant_id = t.id) AS knowledge_tokens,
+            t.billing_status, t.billing_method, t.paid_until, t.trial_ends_at
        FROM tenants t
        LEFT JOIN usage_monthly u ON u.tenant_id = t.id AND u.month = date_trunc('month', now())::date
       ORDER BY t.plan = 'demo', t.created_at DESC`,
@@ -75,10 +78,12 @@ adminRouter.post('/tenants', asyncRoute(async (req, res) => {
   // Ohne Angabe: die Domain der Website automatisch freischalten
   const origins = v.allowedOrigins?.length ? v.allowedOrigins : [hostOf(v.website)].filter(Boolean);
   const { rows } = await query(
-    `INSERT INTO tenants (public_key, slug, name, industry, city, website, contact_email, phone, plan, allowed_origins, settings)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
-    [newPublicKey(), slug, v.name, v.industry, v.city, v.website, v.contactEmail, v.phone, v.plan, normalizeOrigins(origins), v.settings || {}],
+    `INSERT INTO tenants (public_key, slug, name, industry, city, website, contact_email, phone, plan, allowed_origins, settings,
+                          billing_status, trial_ends_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'trial', now() + make_interval(days => $12)) RETURNING *`,
+    [newPublicKey(), slug, v.name, v.industry, v.city, v.website, v.contactEmail, v.phone, v.plan, normalizeOrigins(origins), v.settings || {}, config.trialDays],
   );
+  await logBillingEvent(pool, { tenantId: rows[0].id, source: 'system', type: 'testphase', detail: { days: config.trialDays, until: rows[0].trial_ends_at } });
   res.status(201).json({ ...rows[0], ...embedInfo(rows[0]) });
 }));
 

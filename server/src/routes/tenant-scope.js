@@ -8,6 +8,9 @@ import { z } from 'zod';
 import { config } from '../config.js';
 import { query } from '../db/pool.js';
 import { addUser, listUsers, removeUser, sendLoginToUser } from '../services/auth.js';
+import {
+  billingEvents, billingSummary, createCheckout, createPortalSession, markPaidManually, setActiveManually, setTrial,
+} from '../services/billing.js';
 import { extractPdfText, importWebsite, normalizeUrl } from '../services/importers.js';
 import {
   addKnowledgeEntry, deleteChunk, deleteSource, knowledgeStats, listSources, replaceKnowledge,
@@ -57,7 +60,9 @@ export async function tenantDetail(tenantId) {
     knowledgeStats(t.id), monthlyUsage(t.id), listSources(t.id),
     query(`SELECT count(*)::int AS n FROM leads WHERE tenant_id = $1 AND status = 'neu'`, [t.id]),
   ]);
-  return { ...t, ...embedInfo(t), knowledge, usage, sources, newLeads: leads.rows[0].n, planInfo: PLANS[t.plan] || null };
+  return {
+    ...t, ...embedInfo(t), knowledge, usage, sources, newLeads: leads.rows[0].n, planInfo: PLANS[t.plan] || null, billing: billingSummary(t),
+  };
 }
 
 async function assertKnowledgeRoom(tenantId, replacingSource) {
@@ -90,8 +95,53 @@ export function buildTenantRouter({ role }) {
   r.get('/', asyncRoute(async (req, res) => {
     const t = await tenantDetail(req.tenantId);
     if (!t) return res.status(404).json({ error: 'not_found' });
+    if (!isAdmin) { delete t.stripe_customer_id; delete t.stripe_subscription_id; }
     res.json(t);
   }));
+
+  // ------------------------------------------------------------ Abrechnung
+  r.get('/billing', asyncRoute(async (req, res) => {
+    const t = await tenantDetail(req.tenantId);
+    if (!t) return res.status(404).json({ error: 'not_found' });
+    res.json({ ...t.billing, events: await billingEvents(req.tenantId) });
+  }));
+
+  /** Stripe-Zahlungsseite erstellen. Admin: Link zum Weitergeben; Kunde: direkt weiterleiten. */
+  r.post('/billing/checkout', asyncRoute(async (req, res) => {
+    const { plan } = z.object({ plan: z.enum(['starter', 'business', 'pro']).optional() }).parse(req.body || {});
+    const { rows } = await query('SELECT * FROM tenants WHERE id = $1', [req.tenantId]);
+    if (!rows[0]) return res.status(404).json({ error: 'not_found' });
+    const result = await createCheckout(rows[0], { plan, email: req.session?.email, returnPath: isAdmin ? '/app/#abrechnung' : '/app/#abrechnung' });
+    res.json(result);
+  }));
+
+  r.post('/billing/portal', asyncRoute(async (req, res) => {
+    const { rows } = await query('SELECT * FROM tenants WHERE id = $1', [req.tenantId]);
+    if (!rows[0]) return res.status(404).json({ error: 'not_found' });
+    res.json(await createPortalSession(rows[0], isAdmin ? `/admin/#kunde/${req.tenantId}/abrechnung` : '/app/#abrechnung'));
+  }));
+
+  if (isAdmin) {
+    /** Kunde hat bei dir bezahlt (Überweisung/bar) → einschalten. */
+    r.post('/billing/manual', asyncRoute(async (req, res) => {
+      const v = z.object({ months: z.number().int().min(1).max(36).default(1), note: z.string().max(300).optional() }).parse(req.body || {});
+      const result = await markPaidManually(req.tenantId, v);
+      if (!result) return res.status(404).json({ error: 'not_found' });
+      res.json(await tenantDetail(req.tenantId));
+    }));
+
+    r.post('/billing/active', asyncRoute(async (req, res) => {
+      const v = z.object({ active: z.boolean(), note: z.string().max(300).optional() }).parse(req.body || {});
+      if (!(await setActiveManually(req.tenantId, v.active, v.note))) return res.status(404).json({ error: 'not_found' });
+      res.json(await tenantDetail(req.tenantId));
+    }));
+
+    r.post('/billing/trial', asyncRoute(async (req, res) => {
+      const v = z.object({ days: z.number().int().min(1).max(90) }).parse(req.body || {});
+      if (!(await setTrial(req.tenantId, v.days))) return res.status(404).json({ error: 'not_found' });
+      res.json(await tenantDetail(req.tenantId));
+    }));
+  }
 
   r.patch('/', asyncRoute(async (req, res) => {
     const allowed = isAdmin

@@ -5,6 +5,9 @@ import { after, before, test } from 'node:test';
 
 process.env.LLM_PROVIDER = 'mock';
 process.env.ADMIN_TOKEN = 'test-admin-token';
+process.env.STRIPE_SECRET_KEY = 'sk_test_dummy';
+process.env.STRIPE_WEBHOOK_SECRET = 'whsec_test_secret';
+process.env.STRIPE_PRICE_BUSINESS = 'price_business_test';
 
 const { pool, query } = await import('../server/src/db/pool.js');
 let dbOk = true;
@@ -226,5 +229,89 @@ test('Kunden-Login per Magic Link und Zugriff nur auf den eigenen Betrieb', opts
     assert.deepEqual(unknown, { ok: true });
   } finally {
     await query('DELETE FROM tenants WHERE id = ANY($1)', [[a.id, b.id]]);
+  }
+});
+
+// ---------------------------------------------------------------- Abrechnung: manuell, Testphase, Stripe-Webhook
+test('Abrechnung: Testphase, manuell bezahlt, Ein/Aus und Stripe-Webhook', opts, async () => {
+  const Stripe = (await import('stripe')).default;
+  const stripe = new Stripe('sk_test_dummy');
+  const t = await (await fetch(`${base}/api/admin/tenants`, {
+    method: 'POST', headers: admin, body: JSON.stringify({ name: `Abrechnung Test ${Date.now()}`, industry: 'handwerk', plan: 'starter' }),
+  })).json();
+  const billing = async () => (await fetch(`${base}/api/admin/tenants/${t.id}/billing`, { headers: admin })).json();
+  const widgetStatus = async () => (await fetch(`${base}/api/v1/widget/config?key=${t.public_key}`)).status;
+  const sendEvent = async (event, secret = 'whsec_test_secret') => {
+    const payload = JSON.stringify(event);
+    const header = stripe.webhooks.generateTestHeaderString({ payload, secret });
+    return fetch(`${base}/api/stripe/webhook`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Stripe-Signature': header }, body: payload });
+  };
+
+  try {
+    // 1) Neue Kunden starten in der Testphase und sind aktiv
+    let b = await billing();
+    assert.equal(b.status, 'trial');
+    assert.equal(b.active, true);
+    assert.equal(await widgetStatus(), 200);
+
+    // 2) Abgelaufene Testphase schaltet aus
+    await query(`UPDATE tenants SET trial_ends_at = now() - interval '1 hour' WHERE id = $1`, [t.id]);
+    const { expireTrials } = await import('../server/src/services/billing.js');
+    assert.ok((await expireTrials()) >= 1);
+    b = await billing();
+    assert.equal(b.status, 'expired');
+    assert.equal(b.active, false);
+    assert.equal(await widgetStatus(), 404);
+
+    // 3) Kunde zahlt bei mir → manuell 3 Monate
+    await fetch(`${base}/api/admin/tenants/${t.id}/billing/manual`, { method: 'POST', headers: admin, body: JSON.stringify({ months: 3, note: 'Überweisung' }) });
+    b = await billing();
+    assert.equal(b.status, 'active');
+    assert.equal(b.method, 'manual');
+    assert.equal(b.active, true);
+    const expected = new Date(); expected.setMonth(expected.getMonth() + 3);
+    assert.ok(Math.abs(new Date(b.paidUntil) - expected) < 3 * 86400000, b.paidUntil);
+    assert.equal(await widgetStatus(), 200);
+
+    // 4) Von Hand ausschalten
+    await fetch(`${base}/api/admin/tenants/${t.id}/billing/active`, { method: 'POST', headers: admin, body: JSON.stringify({ active: false }) });
+    assert.equal(await widgetStatus(), 404);
+
+    // 5) Ungültige Signatur wird abgelehnt
+    const bad = await sendEvent({ id: 'evt_bad', type: 'checkout.session.completed', data: { object: {} } }, 'whsec_falsch');
+    assert.equal(bad.status, 400);
+
+    // 6) Stripe: Checkout abgeschlossen → automatisch an, Paket übernommen
+    const completed = {
+      id: `evt_${Date.now()}_1`, type: 'checkout.session.completed',
+      data: { object: { id: 'cs_test', client_reference_id: t.id, metadata: { tenant_id: t.id, plan: 'business' }, customer: `cus_${t.id.slice(0, 8)}`, subscription: `sub_${t.id.slice(0, 8)}`, amount_total: 5900 } },
+    };
+    assert.equal((await sendEvent(completed)).status, 200);
+    b = await billing();
+    assert.equal(b.active, true);
+    assert.equal(b.method, 'stripe');
+    assert.equal(b.plan, 'business');
+    assert.equal(await widgetStatus(), 200);
+
+    // Gleiches Event noch einmal → keine doppelte Verarbeitung
+    assert.equal((await sendEvent(completed)).status, 200);
+    const { rows } = await query(`SELECT count(*)::int AS n FROM billing_events WHERE tenant_id = $1 AND type = 'stripe_bezahlt'`, [t.id]);
+    assert.equal(rows[0].n, 1);
+
+    // 7) Abo gekündigt → automatisch aus
+    const deleted = {
+      id: `evt_${Date.now()}_2`, type: 'customer.subscription.deleted',
+      data: { object: { id: `sub_${t.id.slice(0, 8)}`, customer: `cus_${t.id.slice(0, 8)}`, status: 'canceled', metadata: { tenant_id: t.id }, items: { data: [{ price: { id: 'price_business_test' } }] } } },
+    };
+    assert.equal((await sendEvent(deleted)).status, 200);
+    b = await billing();
+    assert.equal(b.status, 'canceled');
+    assert.equal(b.active, false);
+    assert.equal(await widgetStatus(), 404);
+
+    // Verlauf enthält alle Schritte
+    assert.ok(b.events.length >= 5);
+  } finally {
+    await query('DELETE FROM tenants WHERE id = $1', [t.id]);
   }
 });

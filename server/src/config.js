@@ -38,6 +38,20 @@ export const config = {
 
   adminToken: env.ADMIN_TOKEN || '',
 
+  // Testphase für neue Kunden (Tage); danach wird der Assistent ohne Zahlung ausgeschaltet
+  trialDays: int(env.TRIAL_DAYS, 14),
+
+  stripe: {
+    secretKey: env.STRIPE_SECRET_KEY || '',
+    webhookSecret: env.STRIPE_WEBHOOK_SECRET || '',
+    // Preis-IDs der Monatsabos aus dem Stripe-Dashboard (price_...)
+    prices: {
+      starter: env.STRIPE_PRICE_STARTER || '',
+      business: env.STRIPE_PRICE_BUSINESS || '',
+      pro: env.STRIPE_PRICE_PRO || '',
+    },
+  },
+
   mail: {
     host: env.SMTP_HOST || '',
     port: int(env.SMTP_PORT, 587),

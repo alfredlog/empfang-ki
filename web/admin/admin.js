@@ -66,6 +66,24 @@
     angebot: 'Angebot', rueckruf: 'Rückruf', termin: 'Termin', schaden: 'Schaden', miete: 'Miete', rezept: 'Rezept',
     erstanfrage: 'Erstanfrage', anfrage: 'Anfrage', offene_frage: 'Offene Frage', sonstiges: 'Sonstiges',
   };
+  // Reine Datumswerte ('2027-01-04') ohne Zeitzonen-Verschiebung anzeigen
+  const fmtDay = (d) => (d ? new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeZone: /^\d{4}-\d{2}-\d{2}$/.test(String(d)) ? 'UTC' : undefined }).format(new Date(d)) : '');
+  /** Abrechnungsstatus → kurzer Text + Farbe */
+  function billingBadge(b) {
+    if (!b) return { text: '', cls: '' };
+    if (b.status === 'trial') return { text: `Testphase bis ${fmtDay(b.trialEndsAt)}`, cls: 'warn' };
+    if (b.status === 'active' && b.method === 'manual') return b.overdue ? { text: `Überfällig seit ${fmtDay(b.paidUntil)}`, cls: 'bad' } : { text: `Bezahlt bis ${fmtDay(b.paidUntil)}`, cls: 'ok' };
+    if (b.status === 'active' && b.method === 'stripe') return { text: 'Stripe-Abo aktiv', cls: 'ok' };
+    if (b.status === 'active') return { text: b.active ? 'Aktiv' : 'Ausgeschaltet', cls: b.active ? 'ok' : 'bad' };
+    return {
+      past_due: { text: 'Zahlung offen', cls: 'warn' },
+      canceled: { text: 'Gekündigt / aus', cls: 'bad' },
+      expired: { text: 'Testphase abgelaufen', cls: 'bad' },
+      unpaid: { text: 'Unbezahlt', cls: 'bad' },
+    }[b.status] || { text: b.status, cls: '' };
+  }
+  const listBilling = (t) => billingBadge({ status: t.billing_status, method: t.billing_method, trialEndsAt: t.trial_ends_at, paidUntil: t.paid_until, active: t.active,
+    overdue: t.billing_method === 'manual' && t.paid_until && String(t.paid_until).slice(0, 10) < new Date().toISOString().slice(0, 10) });
   const sourceLabel = (s) => (s === 'manual' ? 'Eigener Text' : s === 'website' ? 'Website' : s === 'faq' ? 'Ergänzte Antworten' : s.startsWith('pdf:') ? `PDF: ${s.slice(4)}` : s);
   const industryLabel = (k) => state.industries.find((i) => i.key === k)?.label || k;
   const planLabel = (k) => { const p = state.plans[k]; return p ? `${p.label}${p.priceEur ? ` (${p.priceEur} €)` : ''}` : k; };
@@ -165,8 +183,8 @@
     const customers = list.filter((t) => t.plan !== 'demo');
     const demos = list.filter((t) => t.plan === 'demo');
     const item = (t) => `<li><button type="button" data-id="${t.id}" aria-current="${state.current?.id === t.id}">
-        <span class="t-name">${esc(t.name)}${t.active ? '' : ' <span class="muted">(pausiert)</span>'}</span>
-        <span class="t-meta">${esc(industryLabel(t.industry))}${t.city ? `, ${esc(t.city)}` : ''}</span>
+        <span class="t-name">${esc(t.name)}${t.active ? '' : ' <span class="muted">(aus)</span>'}</span>
+        <span class="t-meta">${t.plan === 'demo' ? `${esc(industryLabel(t.industry))}${t.city ? `, ${esc(t.city)}` : ''}` : `<span class="dot ${listBilling(t).cls}"></span>${esc(listBilling(t).text)}`}</span>
         ${t.new_leads ? `<span class="t-count" title="Neue Anfragen">${t.new_leads}</span>` : ''}
       </button></li>`;
     $('#tenant-list').innerHTML =
@@ -276,7 +294,7 @@
   // ------------------------------------------------------------ Kundenansicht
   const TABS = [
     ['einbau', 'Einbau'], ['wissen', 'Wissen'], ['anfragen', 'Anfragen'], ['fragen', 'Offene Fragen'],
-    ['gespraeche', 'Gespräche'], ['einstellungen', 'Einstellungen'],
+    ['gespraeche', 'Gespräche'], ['einstellungen', 'Einstellungen'], ['abrechnung', 'Abrechnung'],
     ...(IS_ADMIN ? [['zugaenge', 'Zugänge']] : []),
   ];
 
@@ -309,6 +327,13 @@
           ${t.website ? `<a class="btn btn-secondary" href="${esc(t.website.startsWith('http') ? t.website : `https://${t.website}`)}" target="_blank" rel="noopener">Website öffnen</a>` : ''}
         </div>
       </div>
+      ${(() => {
+        const bb = billingBadge(t.billing);
+        if (!t.active) return `<div class="banner bad"><strong>Ihr Assistent ist ausgeschaltet</strong> (${esc(bb.text)}). ${IS_ADMIN ? 'Unter „Abrechnung“ einschalten oder als bezahlt markieren.' : 'Er erscheint gerade nicht auf Ihrer Website.'} <button class="link-btn" type="button" data-goto="abrechnung">${IS_ADMIN ? 'Zur Abrechnung' : 'Jetzt aktivieren'}</button></div>`;
+        if (t.billing?.status === 'trial' && !IS_ADMIN) return `<div class="banner warn">Testphase bis <strong>${esc(fmtDay(t.billing.trialEndsAt))}</strong>. Danach wird der Assistent ohne Abo ausgeschaltet. <button class="link-btn" type="button" data-goto="abrechnung">Abo abschließen</button></div>`;
+        if (t.billing?.status === 'past_due') return `<div class="banner warn"><strong>Zahlung offen:</strong> ${IS_ADMIN ? 'Stripe konnte zuletzt nicht abbuchen.' : 'Bitte prüfen Sie Ihre Zahlungsmethode.'} <button class="link-btn" type="button" data-goto="abrechnung">Zur Abrechnung</button></div>`;
+        return '';
+      })()}
       <div class="tabs" role="tablist">${TABS.map(([k, label]) => `<button type="button" role="tab" data-tab="${k}" aria-selected="${state.tab === k}">${label}${k === 'anfragen' && newLeads ? `<span class="count">${newLeads}</span>` : ''}</button>`).join('')}</div>
       <div id="tab-body"></div>`;
     $('.tabs').addEventListener('click', (e) => {
@@ -317,12 +342,13 @@
       state.tab = b.dataset.tab;
       renderTenant();
     });
+    $('#main').querySelectorAll('[data-goto]').forEach((b) => b.addEventListener('click', () => { state.tab = b.dataset.goto; renderTenant(); }));
     $('#test-chat').addEventListener('click', () => {
       if (!window.EmpfangKI) return toast('Widget nicht geladen.', true);
       window.EmpfangKI.use(t.public_key, { open: true });
     });
     const body = $('#tab-body');
-    ({ einbau: tabEinbau, wissen: tabWissen, anfragen: tabAnfragen, fragen: tabFragen, gespraeche: tabGespraeche, einstellungen: tabEinstellungen, zugaenge: tabZugaenge })[state.tab](body, t);
+    ({ einbau: tabEinbau, wissen: tabWissen, anfragen: tabAnfragen, fragen: tabFragen, gespraeche: tabGespraeche, einstellungen: tabEinstellungen, abrechnung: tabAbrechnung, zugaenge: tabZugaenge })[state.tab](body, t);
   }
 
   // --- Einbau
@@ -608,10 +634,7 @@
           </div>
           <div class="field"><label for="s-extra">Zusätzliche Anweisungen an den Assistenten</label><textarea id="s-extra" rows="3" placeholder="z. B. „Wir nehmen keine Aufträge unter 500 € an.“ oder „Immer auf den Notdienst hinweisen.“">${esc(s.extraInstructions || '')}</textarea></div>
         </div>
-${IS_ADMIN ? `        <div class="panel">
-          <h2>Status</h2>
-          <label class="check" style="margin-top:10px"><input id="s-active" type="checkbox" ${t.active ? 'checked' : ''}> Assistent ist aktiv (aus = Widget erscheint nicht mehr, z. B. bei Kündigung)</label>
-        </div>` : ''}
+
         <button class="btn btn-primary" type="submit" id="s-btn">Einstellungen speichern</button>
       </form>`;
     $('#s-form').addEventListener('submit', async (e) => {
@@ -639,7 +662,7 @@ ${IS_ADMIN ? `        <div class="panel">
             phone: $('#s-phone').value.trim(),
             allowedOrigins: $('#s-origins').value.split(',').map((x) => x.trim()).filter(Boolean),
             settings,
-            ...(IS_ADMIN ? { industry: $('#s-industry').value, plan: $('#s-plan').value, active: $('#s-active').checked } : {}),
+            ...(IS_ADMIN ? { industry: $('#s-industry').value, plan: $('#s-plan').value } : {}),
           },
         });
         toast('Gespeichert ✓');
@@ -647,6 +670,112 @@ ${IS_ADMIN ? `        <div class="panel">
         renderTenant();
       });
     });
+  }
+
+  // --- Abrechnung: manuell (Admin), Stripe (Admin-Link oder Kunde selbst), Testphase, Verlauf
+  const EVENT_LABEL = {
+    testphase: 'Testphase gestartet', testphase_abgelaufen: 'Testphase abgelaufen', bezahlt: 'Als bezahlt markiert',
+    eingeschaltet: 'Eingeschaltet', ausgeschaltet: 'Ausgeschaltet', stripe_bezahlt: 'Abo über Stripe abgeschlossen',
+    stripe_rechnung_bezahlt: 'Stripe-Rechnung bezahlt', stripe_zahlung_fehlgeschlagen: 'Stripe-Zahlung fehlgeschlagen',
+    stripe_gekuendigt: 'Stripe-Abo beendet', stripe_abo_active: 'Stripe-Abo aktiv', stripe_abo_past_due: 'Stripe: Zahlung offen',
+    stripe_abo_unpaid: 'Stripe: unbezahlt', stripe_abo_canceled: 'Stripe-Abo gekündigt',
+  };
+
+  async function tabAbrechnung(body, t) {
+    body.innerHTML = '<div class="progress"><span class="spinner"></span>Lade Abrechnung …</div>';
+    let b;
+    try { b = await api(T(t) + '/billing'); } catch (err) { body.innerHTML = `<div class="error">${esc(err.message)}</div>`; return; }
+    const badge = billingBadge(b);
+    const paidPlans = ['starter', 'business', 'pro'];
+    const planChoice = (sel) => paidPlans.map((k) => `<option value="${k}" ${k === sel ? 'selected' : ''}>${esc(planLabel(k))} / Monat</option>`).join('');
+
+    const statusPanel = `
+      <div class="panel">
+        <div class="panel-head"><h2>Status</h2><span class="badge ${badge.cls === 'ok' ? '' : badge.cls === 'bad' ? 'bad' : 'warn'}">${esc(badge.text)}</span></div>
+        <div class="stats">
+          <div class="stat"><b>${b.active ? 'An' : 'Aus'}</b><span>Assistent auf der Website</span></div>
+          <div class="stat"><b>${esc(state.plans[b.plan]?.label || b.plan)}</b><span>${b.priceEur ? `${b.priceEur} € pro Monat` : 'ohne Kosten'}</span></div>
+          <div class="stat"><b>${b.method === 'stripe' ? 'Stripe' : b.method === 'manual' ? 'Überweisung/bar' : '–'}</b><span>Zahlungsweg</span></div>
+        </div>
+      </div>`;
+
+    let html = statusPanel;
+    if (IS_ADMIN) {
+      html += `
+      <div class="panel">
+        <h2>Bezahlt bei mir (Überweisung oder bar)</h2>
+        <p class="hint">Schaltet den Assistenten sofort ein und verlängert „bezahlt bis“. ${b.paidUntil ? `Aktuell bezahlt bis <strong>${esc(fmtDay(b.paidUntil))}</strong>.` : ''}</p>
+        <div class="copy-row">
+          <select id="m-months" style="width:auto"><option value="1">1 Monat</option><option value="3">3 Monate</option><option value="6">6 Monate</option><option value="12">12 Monate</option></select>
+          <input id="m-note" type="text" placeholder="Notiz, z. B. Rechnung 2026-004" style="flex:1;min-width:200px">
+          <button class="btn btn-primary" type="button" id="m-paid">Als bezahlt markieren</button>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>Über Stripe bezahlen lassen</h2>
+        ${b.stripeEnabled ? `
+          <p class="hint">Erstellt eine Stripe-Zahlungsseite für ein Monatsabo. Schicken Sie den Link an den Kunden. Nach der Zahlung schaltet sich der Assistent automatisch ein, bei Kündigung oder offener Zahlung automatisch aus.</p>
+          <div class="copy-row"><select id="s-plan-pay" style="width:auto">${planChoice(paidPlans.includes(b.plan) ? b.plan : 'starter')}</select>
+            <button class="btn btn-primary" type="button" id="s-link">Zahlungslink erstellen</button>
+            ${b.stripeCustomer ? '<button class="btn btn-secondary" type="button" id="s-portal">Stripe-Kundenportal öffnen</button>' : ''}</div>
+          <div id="s-link-out"></div>`
+        : '<p class="hint">Stripe ist noch nicht eingerichtet. Tragen Sie <code>STRIPE_SECRET_KEY</code>, <code>STRIPE_WEBHOOK_SECRET</code> und die Preis-IDs in die <code>.env</code> ein (Anleitung in der README).</p>'}
+      </div>
+      <div class="panel">
+        <h2>Testphase und Ein/Aus</h2>
+        <div class="copy-row" style="margin-top:10px">
+          <select id="t-days" style="width:auto"><option value="7">7 Tage</option><option value="14" selected>14 Tage</option><option value="30">30 Tage</option></select>
+          <button class="btn btn-secondary" type="button" id="t-trial">${b.status === 'trial' ? 'Testphase verlängern' : 'Testphase starten'}</button>
+          <span style="flex:1"></span>
+          ${b.active ? '<button class="btn btn-danger" type="button" id="t-off">Assistent ausschalten</button>' : '<button class="btn btn-secondary" type="button" id="t-on">Ohne Zahlung einschalten</button>'}
+        </div>
+        <p class="hint">Eine abgelaufene Testphase schaltet den Assistenten automatisch aus. „Ohne Zahlung einschalten“ eignet sich z. B. für Pilotkunden.</p>
+      </div>`;
+    } else {
+      // Kunde
+      if (b.method === 'stripe' && b.stripeCustomer && ['active', 'past_due'].includes(b.status)) {
+        html += `<div class="panel"><h2>Ihr Abo</h2><p class="hint">Rechnungen herunterladen, Zahlungsart ändern, Paket wechseln oder kündigen. Das geht alles im sicheren Stripe-Kundenportal.</p>
+          <button class="btn btn-primary" type="button" id="s-portal">Abo verwalten</button></div>`;
+      } else if (b.method === 'manual' && b.status === 'active') {
+        html += `<div class="panel"><h2>Zahlung per Rechnung</h2><p>Sie zahlen per Rechnung. Ihr Assistent ist bezahlt bis <strong>${esc(fmtDay(b.paidUntil))}</strong>.</p>
+          <p class="hint">Fragen zur Rechnung: <a href="mailto:support@pdf-libre.de">support@pdf-libre.de</a></p></div>`;
+      } else if (b.stripeEnabled) {
+        html += `<div class="panel"><h2>Abo abschließen</h2><p class="hint">Monatlich kündbar. Die Zahlung läuft sicher über Stripe (Karte, SEPA-Lastschrift u. a.). Ihr Assistent wird direkt nach der Zahlung eingeschaltet.</p>
+          <div class="plans-pick">${paidPlans.map((k) => `
+            <label class="plan-pick"><input type="radio" name="plan-pick" value="${k}" ${k === (paidPlans.includes(b.plan) ? b.plan : 'starter') ? 'checked' : ''}>
+              <span><strong>${esc(state.plans[k].label)}</strong><span class="price-sm">${state.plans[k].priceEur} € / Monat</span><span class="hint">bis ${fmtNum(state.plans[k].monthlyConversations)} Gespräche</span></span></label>`).join('')}</div>
+          <button class="btn btn-primary" type="button" id="s-subscribe" style="margin-top:14px">Weiter zur Zahlung</button></div>`;
+      } else {
+        html += `<div class="panel"><h2>Abo abschließen</h2><p>Für ein Abo schreiben Sie uns bitte an <a href="mailto:support@pdf-libre.de">support@pdf-libre.de</a>.</p></div>`;
+      }
+    }
+
+    html += `<div class="panel"><h2>Verlauf</h2><div class="rows" style="margin-top:10px">${b.events.length ? b.events.map((e) => `
+      <div class="row"><div class="row-head"><span>${esc(EVENT_LABEL[e.type] || e.type)}${e.detail?.months ? ` (${e.detail.months} Monat${e.detail.months > 1 ? 'e' : ''})` : ''}${e.detail?.amountEur ? `, ${String(e.detail.amountEur).replace('.', ',')} €` : ''}${IS_ADMIN && e.detail?.note ? `, ${esc(e.detail.note)}` : ''}</span>
+      <span class="row-meta">${e.source === 'stripe' ? 'Stripe · ' : e.source === 'system' ? 'automatisch · ' : ''}${fmtDate(e.created_at)}</span></div></div>`).join('') : '<p class="hint">Noch keine Einträge.</p>'}</div></div>`;
+    body.innerHTML = html;
+
+    const after = async (promise, msg) => { await promise; toast(msg); await refreshCurrent(); renderTenant(); };
+    $('#m-paid')?.addEventListener('click', (e) => busy(e.currentTarget, () => after(
+      api(T(t) + '/billing/manual', { method: 'POST', body: { months: Number($('#m-months').value), note: $('#m-note').value.trim() || undefined } }), 'Als bezahlt markiert, Assistent ist an ✓')));
+    $('#t-trial')?.addEventListener('click', (e) => busy(e.currentTarget, () => after(
+      api(T(t) + '/billing/trial', { method: 'POST', body: { days: Number($('#t-days').value) } }), 'Testphase gesetzt ✓')));
+    $('#t-off')?.addEventListener('click', (e) => { if (confirm('Assistent ausschalten? Er erscheint dann nicht mehr auf der Website.')) busy(e.currentTarget, () => after(api(T(t) + '/billing/active', { method: 'POST', body: { active: false } }), 'Ausgeschaltet')); });
+    $('#t-on')?.addEventListener('click', (e) => busy(e.currentTarget, () => after(api(T(t) + '/billing/active', { method: 'POST', body: { active: true } }), 'Eingeschaltet ✓')));
+    $('#s-link')?.addEventListener('click', (e) => busy(e.currentTarget, async () => {
+      const r = await api(T(t) + '/billing/checkout', { method: 'POST', body: { plan: $('#s-plan-pay').value } });
+      $('#s-link-out').innerHTML = `<p class="hint" style="margin-top:12px">Zahlungslink für ${esc(planLabel(r.plan))}, gültig 24 Stunden:</p><div class="code">${esc(r.url)}</div><button class="btn btn-secondary" type="button" id="s-copy">Link kopieren</button>`;
+      $('#s-copy').addEventListener('click', () => copy(r.url, 'Zahlungslink kopiert'));
+    }));
+    $('#s-portal')?.addEventListener('click', (e) => busy(e.currentTarget, async () => {
+      const r = await api(T(t) + '/billing/portal', { method: 'POST' });
+      if (IS_ADMIN) window.open(r.url, '_blank', 'noopener'); else location.href = r.url;
+    }));
+    $('#s-subscribe')?.addEventListener('click', (e) => busy(e.currentTarget, async () => {
+      const plan = body.querySelector('input[name="plan-pick"]:checked')?.value;
+      const r = await api(T(t) + '/billing/checkout', { method: 'POST', body: { plan } });
+      location.href = r.url;
+    }));
   }
 
   // --- Zugänge (nur Admin): wer darf sich ins Kunden-Dashboard einloggen?
@@ -712,6 +841,12 @@ ${IS_ADMIN ? `        <div class="panel">
     if (new URLSearchParams(location.search).get('login') === 'abgelaufen') {
       history.replaceState(null, '', location.pathname);
       showLogin('Dieser Anmeldelink ist abgelaufen oder wurde schon benutzt. Fordern Sie einfach einen neuen an.');
-    } else start();
+    } else {
+      if (new URLSearchParams(location.search).get('bezahlt') === '1') {
+        history.replaceState(null, '', location.pathname + location.hash);
+        setTimeout(() => toast('Vielen Dank! Die Zahlung ist eingegangen. Ihr Assistent wird in wenigen Sekunden aktiviert ✓'), 600);
+      }
+      start();
+    }
   }
 })();

@@ -84,7 +84,7 @@ export async function requestLogin(email, nextPath) {
   const { rows } = await query(
     `SELECT u.id, u.email, t.name AS tenant_name FROM tenant_users u
        JOIN tenants t ON t.id = u.tenant_id
-      WHERE lower(u.email) = $1 AND t.active ORDER BY t.name`,
+      WHERE lower(u.email) = $1 ORDER BY t.name`,
     [normalizeEmail(email)],
   );
   if (!rows.length) return { sent: false };
@@ -133,7 +133,7 @@ export async function getSession(sessionToken) {
     `SELECT s.user_id, u.email, u.tenant_id FROM sessions s
        JOIN tenant_users u ON u.id = s.user_id
        JOIN tenants t ON t.id = u.tenant_id
-      WHERE s.token_hash = $1 AND s.expires_at > now() AND t.active`,
+      WHERE s.token_hash = $1 AND s.expires_at > now()`,
     [sha256(sessionToken)],
   );
   return rows[0] || null;
