@@ -58,6 +58,8 @@ export const config = {
     user: env.SMTP_USER || '',
     pass: env.SMTP_PASS || '',
     from: env.MAIL_FROM || 'Empfang KI <no-reply@localhost>',
+    // Wohin Antworten auf System-Mails gehen (z. B. wenn MAIL_FROM kein eigenes Postfach hat)
+    replyTo: env.MAIL_REPLY_TO || '',
   },
 };
 

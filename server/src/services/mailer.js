@@ -22,7 +22,7 @@ export async function sendMail({ to, subject, text, html, replyTo }) {
     console.log(`[mail:dry-run] an ${to || '(keine Adresse)'} – ${subject}`);
     return { sent: false };
   }
-  const info = await t.sendMail({ from: config.mail.from, to, replyTo: replyTo || undefined, subject, text, html });
+  const info = await t.sendMail({ from: config.mail.from, to, replyTo: replyTo || config.mail.replyTo || undefined, subject, text, html });
   // Antwort des Mailservers protokollieren (journalctl -u empfang-ki | grep mail)
   const rejected = info.rejected?.length ? ` abgelehnt: ${info.rejected.join(', ')}` : '';
   console.log(`[mail] an ${to} – „${subject}“ – Server: ${String(info.response || '').slice(0, 120)}${rejected}`);
