@@ -40,7 +40,7 @@ Der Betrieb gibt seine Infos (Website, Preisliste, Stichpunkte). Danach wird ein
 Die Anwendung und die Gesprächsdaten liegen auf einem Server in Deutschland. Gespräche werden nach 30 Tagen automatisch gelöscht. Der Assistent fragt nur Name, Kontakt und Anliegen ab. Für die Antworten wird ein KI-Sprachmodell (Claude von Anthropic) genutzt. Ein Vertrag zur Auftragsverarbeitung (AVV) wird bereitgestellt.
 
 # Kontakt
-Ansprechpartner: Alfred Mushagalusa Munganga, Darmstadt. E-Mail: kontakt@pdf-libre.de. Beratung und Demo dauern etwa 15 Minuten, gern auch persönlich vor Ort.`,
+Ansprechpartner: Alfred Mushagalusa Munganga, Darmstadt. E-Mail: support@pdf-libre.de. Beratung und Demo dauern etwa 15 Minuten, gern auch persönlich vor Ort.`,
   },
   {
     publicKey: 'pk_demo_prinz',
