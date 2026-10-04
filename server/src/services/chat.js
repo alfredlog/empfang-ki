@@ -33,11 +33,11 @@ export function leadTool(tenant) {
         name: { type: 'string', description: 'Name der Person' },
         telefon: { type: 'string', description: 'Telefonnummer (falls angegeben)' },
         email: { type: 'string', description: 'E-Mail-Adresse (falls angegeben)' },
-        zusammenfassung: { type: 'string', description: 'Anliegen in 1–3 sachlichen Sätzen für das Team' },
+        zusammenfassung: { type: 'string', description: 'Anliegen in 1–3 sachlichen Sätzen für das Team, IMMER auf Deutsch (auch wenn der Besucher eine andere Sprache spricht; dann die Sprache des Besuchers kurz nennen)' },
         offene_frage: { type: 'string', description: 'Nur bei art "offene_frage": die Frage, die du nicht beantworten konntest, möglichst im Wortlaut' },
         details: {
           type: 'object',
-          description: 'Weitere strukturierte Angaben, z. B. {"Wunschtermin": "Do vormittags", "Ort": "64283 Darmstadt"}',
+          description: 'Weitere strukturierte Angaben auf Deutsch, z. B. {"Wunschtermin": "Do vormittags", "Ort": "64283 Darmstadt"}',
           additionalProperties: { type: 'string' },
         },
       },
