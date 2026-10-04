@@ -877,7 +877,7 @@
       </div>`;
 
     const showLink = (r) => {
-      $('#u-link').innerHTML = `<p class="hint" style="margin-top:12px">${r.mailSent ? 'Login-Mail wurde verschickt ✓.' : '<strong>E-Mail konnte nicht verschickt werden</strong> (SMTP nicht eingerichtet?).'} Sie können den Link auch direkt weitergeben, z. B. per WhatsApp. Er ist 30 Minuten gültig und funktioniert einmal:</p>
+      $('#u-link').innerHTML = `<p class="hint" style="margin-top:12px">${r.mailSent ? 'Login-Mail wurde an den Mailserver übergeben ✓. Kommt sie nicht an, bitte im Spam-Ordner nachsehen.' : '<strong>E-Mail konnte nicht verschickt werden</strong> (SMTP nicht eingerichtet?).'} Sie können den Link auch direkt weitergeben, z. B. per WhatsApp. Er ist 30 Minuten gültig und funktioniert einmal:</p>
         <div class="code">${esc(r.loginUrl)}</div><button class="btn btn-secondary" type="button" id="u-copy">Link kopieren</button>`;
       $('#u-copy').addEventListener('click', () => copy(r.loginUrl, 'Login-Link kopiert'));
     };

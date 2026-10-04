@@ -54,22 +54,27 @@ export async function createLoginLink(userId, nextPath) {
 
 function loginMail(user, links) {
   const multi = links.length > 1;
-  const subject = 'Ihr Anmeldelink für Empfang KI';
+  const firm = multi ? 'Ihre Betriebe' : links[0].tenantName;
+  const subject = `Anmeldung im Dashboard – ${multi ? 'Empfang KI' : links[0].tenantName}`;
   const text = `Guten Tag,
 
-${multi ? 'hier sind Ihre Anmeldelinks:' : 'hier ist Ihr Anmeldelink für das Dashboard:'}
+Sie können sich jetzt im Dashboard von Empfang KI für ${firm} anmelden.
+Dort sehen Sie Anfragen, offene Fragen und Gespräche Ihres Website-Assistenten.
 
-${links.map((l) => `${l.tenantName}: ${l.url}`).join('\n')}
+${links.map((l) => `${multi ? `${l.tenantName}: ` : ''}${l.url}`).join('\n')}
 
-Der Link ist ${LINK_MINUTES} Minuten gültig und kann einmal verwendet werden.
-Falls Sie keinen Link angefordert haben, können Sie diese E-Mail ignorieren.
+Der Link ist ${LINK_MINUTES} Minuten gültig und funktioniert einmal. Später fordern Sie unter ${config.publicUrl}/app/ jederzeit einen neuen an.
+Diese E-Mail ging an ${user.email}. Wenn Sie nichts angefordert haben, ignorieren Sie sie einfach.
 
-Empfang KI`;
-  const html = `<div style="font-family:system-ui,sans-serif;max-width:520px;color:#1b2a3a">
+Viele Grüße
+Empfang KI · ${config.publicUrl.replace(/^https?:\/\//, '')}`;
+  const html = `<div style="font-family:system-ui,sans-serif;max-width:520px;color:#1b2a3a;line-height:1.5">
     <p>Guten Tag,</p>
-    <p>${multi ? 'hier sind Ihre Anmeldelinks:' : 'mit diesem Button melden Sie sich im Dashboard an:'}</p>
-    ${links.map((l) => `<p><a href="${l.url}" style="display:inline-block;background:#0e5e63;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">${multi ? `Anmelden: ${escapeHtml(l.tenantName)}` : 'Im Dashboard anmelden'}</a></p>`).join('')}
-    <p style="color:#4a5868;font-size:14px">Der Link ist ${LINK_MINUTES} Minuten gültig und kann einmal verwendet werden. Falls Sie keinen Link angefordert haben, ignorieren Sie diese E-Mail einfach.</p>
+    <p>Sie können sich jetzt im Dashboard von Empfang KI für <strong>${escapeHtml(firm)}</strong> anmelden. Dort sehen Sie Anfragen, offene Fragen und Gespräche Ihres Website-Assistenten.</p>
+    ${links.map((l) => `<p><a href="${l.url}" style="display:inline-block;background:#0e5e63;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">${multi ? `Anmelden: ${escapeHtml(l.tenantName)}` : 'Im Dashboard anmelden'}</a></p>
+    <p style="font-size:13px;color:#4a5868;word-break:break-all">Falls der Button nicht funktioniert: ${l.url}</p>`).join('')}
+    <p style="color:#4a5868;font-size:14px">Der Link ist ${LINK_MINUTES} Minuten gültig und funktioniert einmal. Einen neuen bekommen Sie jederzeit unter ${config.publicUrl}/app/.<br>Diese E-Mail ging an ${escapeHtml(user.email)}. Wenn Sie nichts angefordert haben, ignorieren Sie sie einfach.</p>
+    <p style="color:#4a5868;font-size:14px">Viele Grüße<br>Empfang KI</p>
   </div>`;
   return { to: user.email, subject, text, html };
 }
