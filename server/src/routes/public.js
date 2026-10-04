@@ -3,7 +3,7 @@
 import { Router } from 'express';
 import { rateLimit, ipKeyGenerator } from 'express-rate-limit';
 import { config } from '../config.js';
-import { applyCors, isOriginAllowed, preflight } from '../middleware/security.js';
+import { applyCors, isOriginAllowed, preflight, requestOrigin } from '../middleware/security.js';
 import { ChatError, handleChatTurn } from '../services/chat.js';
 import { getTenantByKey, getTenantBySlug, publicWidgetConfig } from '../services/tenants.js';
 
@@ -13,7 +13,7 @@ publicRouter.options(/.*/, preflight);
 
 /** Lädt den Mandanten zum Key und prüft die Herkunft der Anfrage. */
 async function resolveTenant(req, res, key) {
-  const origin = req.headers.origin;
+  const origin = requestOrigin(req);
   const tenant = await getTenantByKey(key);
   if (!tenant) {
     res.status(404).json({ error: 'unknown_bot', message: 'Dieser Chat ist nicht verfügbar.' });
@@ -23,7 +23,8 @@ async function resolveTenant(req, res, key) {
     res.status(403).json({ error: 'origin_not_allowed', message: 'Dieser Chat ist für diese Website nicht freigeschaltet.' });
     return null;
   }
-  applyCors(res, origin);
+  if (req.headers.origin) applyCors(res, req.headers.origin);
+  req.verifiedOrigin = origin;
   return tenant;
 }
 
@@ -78,7 +79,7 @@ publicRouter.post('/chat', chatLimiter, async (req, res) => {
       tenant,
       conversationId: typeof conversationId === 'string' && /^[0-9a-f-]{36}$/i.test(conversationId) ? conversationId : null,
       visitorId: typeof visitorId === 'string' ? visitorId : null,
-      origin: req.headers.origin,
+      origin: req.verifiedOrigin,
       message,
       emit,
       signal: abort.signal,

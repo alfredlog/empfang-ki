@@ -4,6 +4,21 @@ import { config, isProd } from '../config.js';
 const LOCAL = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/;
 
 /**
+ * Ermittelt, von welcher Website eine Anfrage kommt.
+ * Browser senden bei GET-Anfragen von derselben Domain KEINEN Origin-Header –
+ * dann gilt Sec-Fetch-Site: same-origin (bzw. der Referer) als Nachweis für unsere eigene Domain.
+ */
+export function requestOrigin(req) {
+  const h = req.headers || {};
+  if (h.origin && h.origin !== 'null') return h.origin;
+  if (h['sec-fetch-site'] === 'same-origin') return config.publicUrl;
+  if (h.referer) {
+    try { return new URL(h.referer).origin; } catch { /* ungültiger Referer */ }
+  }
+  return null;
+}
+
+/**
  * Darf dieses Widget auf der anfragenden Website laufen?
  * Erlaubt: vom Kunden hinterlegte Domains, unsere eigene Domain (Demos, gehostete Chat-Seite)
  * und in der Entwicklung localhost.

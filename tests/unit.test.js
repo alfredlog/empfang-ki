@@ -79,3 +79,12 @@ test('öffentliche Widget-Konfiguration enthält keine internen Daten', () => {
   assert.equal(cfg.allowed_origins, undefined);
   assert.ok(cfg.quickReplies.length > 0);
 });
+
+test('requestOrigin: gleiche Domain ohne Origin-Header wird erkannt', async () => {
+  const { requestOrigin } = await import('../server/src/middleware/security.js');
+  const { config } = await import('../server/src/config.js');
+  assert.equal(requestOrigin({ headers: { origin: 'https://kunde.de' } }), 'https://kunde.de');
+  assert.equal(requestOrigin({ headers: { 'sec-fetch-site': 'same-origin' } }), config.publicUrl);
+  assert.equal(requestOrigin({ headers: { referer: 'https://kunde.de/kontakt?x=1' } }), 'https://kunde.de');
+  assert.equal(requestOrigin({ headers: {} }), null);
+});
