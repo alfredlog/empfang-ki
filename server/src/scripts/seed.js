@@ -1,6 +1,5 @@
 // Legt die Demo-Betriebe an (idempotent – kann beliebig oft ausgeführt werden).
-// Alle Muster-Betriebe sind frei erfunden. "Autovermietung Prinz" nutzt nur öffentlich
-// auf der Website stehende Angaben und verschickt in der Demo keine E-Mails.
+// Alle Muster-Betriebe sind frei erfunden und verschicken in der Demo keine E-Mails.
 import { config } from '../config.js';
 import { migrate } from '../db/migrate.js';
 import { pool, query } from '../db/pool.js';
@@ -46,52 +45,47 @@ Die Anwendung und die Gesprächsdaten liegen auf einem Server in Deutschland. Ge
 Ansprechpartner: Alfred Mushagalusa Munganga, Darmstadt. E-Mail: support@pdf-libre.de. Beratung und Demo dauern etwa 15 Minuten, gern auch persönlich vor Ort.`,
   },
   {
-    publicKey: 'pk_demo_prinz',
-    slug: 'autovermietung-prinz',
-    name: 'Autovermietung Prinz',
+    publicKey: 'pk_demo_auto',
+    slug: 'autovermietung-demo',
+    name: 'Autovermietung',
     industry: 'autovermietung',
     city: 'Darmstadt',
-    website: 'https://autovermietung-prinz.de',
-    phone: '06151 51922',
-    allowedOrigins: ['autovermietung-prinz.de'],
+    phone: '06151 000000',
     settings: {
       color: '#c8102e',
-      assistantName: 'Prinz-Assistent',
+      assistantName: 'Mietwagen-Assistent',
       quickReplies: ['Transporter mieten', 'TÜV-Termin anfragen', 'Öffnungszeiten'],
     },
     knowledge: `# Über uns
-Autovermietung Prinz bietet ein Rundum-Sorglos-Paket rund ums Auto: Autovermietung, meistergeführte Autowerkstatt, Autoreinigung/Fahrzeugpflege und Tankstellen (Aral-Partner).
+Die (fiktive) Autovermietung in Darmstadt bietet Mietwagen, eine meistergeführte Kfz-Werkstatt und Fahrzeugpflege aus einer Hand.
 
 # Kontakt
-Telefon Autovermietung und Werkstatt: 06151 51922
-Telefon Tankstelle: 06151 52527
-E-Mail: info@autovermietung-prinz.de
-
-# Standorte
-Darmstadt: Reuterallee 51, 64297 Darmstadt (Autovermietung, Werkstatt, Tankstelle)
-Frankfurt: Lyoner Straße 70, 60528 Frankfurt am Main (Werkstatt, Tankstelle)
+Telefon: 06151 000000
+Adresse: Musterstraße 1, 64283 Darmstadt
 
 # Öffnungszeiten
-Autovermietung (Darmstadt): Montag bis Freitag 09:00–16:00 Uhr.
-Autowerkstatt (Darmstadt und Frankfurt): Montag bis Donnerstag 08:00–17:00 Uhr, Freitag 08:00–15:00 Uhr.
-Tankstellen (Darmstadt und Frankfurt): Montag bis Freitag 06:00–22:00 Uhr, Samstag 07:00–22:00 Uhr, Sonntag 08:00–22:00 Uhr.
-Am Wochenende ist das Vermietungsbüro geschlossen – Anfragen über diesen Chat werden am nächsten Werktag bearbeitet.
+Vermietung: Montag bis Freitag 08:00–18:00 Uhr, Samstag 09:00–13:00 Uhr.
+Werkstatt: Montag bis Freitag 07:30–17:00 Uhr.
+Sonntag geschlossen – Anfragen über diesen Chat werden am nächsten Werktag bearbeitet.
 
-# Autovermietung
-Fahrzeuge: PKW, Transporter und 9-Sitzer. Weitere Fahrzeugtypen auf Anfrage.
-Tarife: Top-Angebote, Pauschal-Tarife und Wochenend-Tarife.
-Preise: Es gibt eine Preisliste; aktuelle Preise und Verfügbarkeit nennt das Team auf Anfrage.
-Mietbedingungen (Mindestalter, Kaution, Freikilometer, Versicherung): bitte beim Team erfragen.
-Reservierung: telefonisch, per E-Mail oder über eine Anfrage in diesem Chat.
+# Mietwagen
+Kleinwagen (z. B. VW Polo): ab 39 € pro Tag.
+Kombi (z. B. Skoda Octavia): ab 55 € pro Tag.
+Transporter (z. B. VW Crafter, 3,5 t): ab 69 € pro Tag, ideal für Umzüge.
+9-Sitzer (z. B. Ford Transit Kombi): ab 89 € pro Tag.
+Wochenend-Tarif: Freitag 16 Uhr bis Montag 9 Uhr zum Preis von zwei Tagen.
+Inklusive 200 Freikilometer pro Tag, jeder weitere Kilometer 0,25 €.
+Mindestalter 21 Jahre, Führerschein seit mindestens 2 Jahren. Kaution 300 € (nur Kreditkarte).
+Reservierung: telefonisch oder über eine Anfrage in diesem Chat. Das Team bestätigt Verfügbarkeit und Preis.
 
-# Autowerkstatt
-Meistergeführte Kfz-Werkstatt für alle Fabrikate. Leistungen: Reifen-Service, Sommer- und Winter-Check, TÜV und AU, Inspektion aller Fahrzeuge, Diagnose aller Fahrzeugtypen, Autolackierung, Reparatur aller Autofabrikate, Karosserie-Reparaturen, Kfz-Sachverständigen-Service. Partner u. a. TÜV und Europa-Service.
+# Werkstatt
+Meistergeführte Werkstatt für alle Marken: Inspektion, TÜV und AU, Reifenwechsel (ab 25 €), Einlagerung von Reifen (40 € pro Saison), Klimaservice, Bremsen, Unfallreparatur.
 
-# Autoreinigung und Fahrzeugpflege
-Polster- und Lederreinigung, Felgenreinigung, Politur, Scheibenreinigung.
+# Fahrzeugpflege
+Innen- und Außenreinigung, Polsterreinigung, Politur.
 
 # Zahlung
-Akzeptiert werden u. a. Visa, Mastercard, American Express, EC-Karte und Routex.`,
+EC-Karte, Kreditkarte oder bar.`,
   },
   {
     publicKey: 'pk_demo_maler',
@@ -194,6 +188,9 @@ Bar, EC-Karte und Apple Pay.`,
 ];
 
 await migrate({ log: () => {} });
+
+// Frühere Demo mit echten Firmendaten entfernen
+await query("DELETE FROM tenants WHERE slug = 'autovermietung-prinz' OR public_key = 'pk_demo_prinz'");
 
 for (const d of demos) {
   const { rows } = await query(

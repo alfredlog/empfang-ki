@@ -69,7 +69,7 @@ PAGES = {
     chat=[('user', 'Kann ich am Samstag einen Transporter abholen?'),
           ('bot', 'Unser Vermietungsbüro ist samstags geschlossen. Ich nehme Ihre Anfrage aber gern auf, dann meldet sich das Team am Montag mit Verfügbarkeit und Preis. Welche Fahrzeuggröße brauchen Sie?'),
           ('user', 'Einen Transporter, Freitag bis Sonntag.')],
-    demo='/demo/prinz', demo_label='Demo: Autovermietung & Werkstatt ansehen',
+    demo='/demo/autovermietung', demo_label='Demo: Autovermietung & Werkstatt ansehen',
     examples='Kfz-Werkstätten, Reifenservice, Autovermietungen, Autohäuser, Fahrzeugpflege'),
 }
 
