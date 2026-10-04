@@ -4,7 +4,7 @@ import { chunkText, estimateTokens } from '../server/src/services/knowledge.js';
 import { normalizeOrigins, publicWidgetConfig } from '../server/src/services/tenants.js';
 import { isOriginAllowed } from '../server/src/middleware/security.js';
 import { buildSystemPrompt, industries } from '../server/src/templates/industries.js';
-import { buildSystemBlocks, leadTool } from '../server/src/services/chat.js';
+import { buildSystemBlocks, leadTool, stripEmoji } from '../server/src/services/chat.js';
 
 const tenant = (over = {}) => ({
   id: 't1', name: 'Malerbetrieb Test', industry: 'handwerk', city: 'Darmstadt',
@@ -102,4 +102,11 @@ test('Monatsbericht wird nur am 1. ab 8 Uhr verschickt', async () => {
   const { runMonthlyReports } = await import('../server/src/services/insights.js');
   assert.equal(await runMonthlyReports(new Date('2026-10-15T10:00:00+02:00')), 0);
   assert.equal(await runMonthlyReports(new Date('2026-10-01T06:00:00+02:00')), 0);
+});
+
+test('stripEmoji entfernt Emojis, lässt Text, Umlaute, € und © stehen', () => {
+  assert.equal(stripEmoji('Gern! 😊 Wir melden uns.'), 'Gern! Wir melden uns.');
+  assert.equal(stripEmoji('Heizung und Klima. 😊'), 'Heizung und Klima. ');
+  assert.equal(stripEmoji('👍🏽 Danke ❤️'), ' Danke ');
+  assert.equal(stripEmoji('Größe 6 m², ab 14.900 € © Weber → Termin'), 'Größe 6 m², ab 14.900 € © Weber → Termin');
 });

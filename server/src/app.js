@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
@@ -9,6 +10,15 @@ import { portalRouter } from './routes/portal.js';
 import { stripeRouter } from './routes/stripe.js';
 import { SESSION_COOKIE, sessionCookieOptions, verifyLoginToken } from './services/auth.js';
 import { publicRouter } from './routes/public.js';
+
+// Aktueller Git-Commit (zeigt in /healthz, welcher Stand auf dem Server läuft)
+const APP_VERSION = (() => {
+  try {
+    return execSync('git rev-parse --short HEAD', { cwd: new URL('../..', import.meta.url), stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+  } catch {
+    return 'unbekannt';
+  }
+})();
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const webDir = path.join(root, 'web');
@@ -45,7 +55,7 @@ export function createApp() {
   app.get('/healthz', async (req, res) => {
     try {
       await pool.query('SELECT 1');
-      res.json({ ok: true });
+      res.json({ ok: true, version: APP_VERSION });
     } catch {
       res.status(503).json({ ok: false });
     }

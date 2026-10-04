@@ -19,6 +19,13 @@ export class ChatError extends Error {
 
 const MAX_TOOL_ROUNDS = 3;
 
+// Emojis wirken in Firmen-Chats unprofessionell – werden unabhängig vom Modell entfernt
+// (©, ®, ™ und Pfeile bleiben erhalten)
+const EMOJI_RE = /(?![©®™←-⇿])\p{Extended_Pictographic}|[\u{1F1E6}-\u{1F1FF}\u{1F3FB}-\u{1F3FF}️‍]/gu;
+export function stripEmoji(text) {
+  return text.replace(EMOJI_RE, '').replace(/[ \t]{2,}/g, ' ').replace(/ +([.,!?])/g, '$1');
+}
+
 export function leadTool(tenant) {
   const kinds = getIndustry(tenant.industry).leadKinds;
   return {
@@ -92,7 +99,12 @@ function berlinNow() {
 export function buildSystemBlocks(tenant, context) {
   const base = buildSystemPrompt(tenant);
   const knowledge = `UNTERNEHMENSINFORMATIONEN (einzige Quelle für Fakten):\n---\n${context.text || '(Noch keine Informationen hinterlegt.)'}\n---`;
-  const now = { text: `Aktuelles Datum und Uhrzeit (Deutschland): ${berlinNow()}. Nutze das, um z. B. zu sagen, ob gerade geöffnet ist.` };
+  const now = {
+    text:
+      `Aktuelles Datum und Uhrzeit (Deutschland): ${berlinNow()}. Nutze das, um z. B. zu sagen, ob gerade geöffnet ist.\n\n` +
+      'WICHTIG BEI JEDER ANTWORT: Sie-Form, keine Emojis. Steht die Antwort nicht ausdrücklich in den Unternehmensinformationen, ' +
+      'sag „Dazu habe ich leider keine Angabe“ und biete an, die Frage an das Team weiterzugeben.',
+  };
   if (context.mode === 'full') return [{ text: `${base}\n\n${knowledge}`, cache: true }, now];
   return [{ text: base, cache: true }, { text: knowledge }, now];
 }
@@ -187,7 +199,9 @@ export async function handleChatTurn({ tenant, conversationId, visitorId, origin
       messages,
       tools,
       signal,
-      onText: (delta) => {
+      onText: (raw) => {
+        const delta = stripEmoji(raw);
+        if (!delta) return;
         if (!roundText && answer) {
           emit('delta', { text: '\n\n' });
           answer += '\n\n';
