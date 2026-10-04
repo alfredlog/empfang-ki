@@ -1,0 +1,9 @@
+# In die bestehende Caddyfile auf dem Server einfügen.
+# Caddy holt das SSL-Zertifikat automatisch.
+chatbot.pdf-libre.de {
+	encode gzip
+	reverse_proxy 127.0.0.1:3010 {
+		# Antworten sofort durchreichen (wichtig für das Streaming im Chat)
+		flush_interval -1
+	}
+}
