@@ -38,7 +38,7 @@ export const kindLabel = (k) => KIND_LABEL[k] || 'Anfrage';
 export async function sendLeadEmail(tenant, lead) {
   const subject = lead.kind === 'offene_frage'
     ? `Offene Frage – bitte zurückmelden: ${lead.name}`
-    : `Neue ${kindLabel(lead.kind)} über den Website-Chat – ${lead.name}`;
+    : `Neue Anfrage (${kindLabel(lead.kind)}) über den Website-Chat – ${lead.name}`;
   const rows = [
     ['Art', kindLabel(lead.kind)],
     ['Name', lead.name],
