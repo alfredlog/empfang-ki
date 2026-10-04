@@ -1,0 +1,19 @@
+# systemd-Dienst: startet die App beim Booten und nach Abstürzen automatisch neu.
+# Installieren: sudo cp infra/empfang-ki.service /etc/systemd/system/
+# Pfade/Benutzer ggf. anpassen (hier: Benutzer "alfred", Projekt in /home/alfred/empfang-ki).
+[Unit]
+Description=Empfang KI (Chat-Assistent)
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=alfred
+WorkingDirectory=/home/alfred/empfang-ki
+EnvironmentFile=/home/alfred/empfang-ki/.env
+ExecStart=/usr/bin/env node server/src/index.js
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

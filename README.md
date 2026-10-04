@@ -60,6 +60,21 @@ npm run dev                      # Server mit Auto-Reload auf http://localhost:3
 npm test                         # Tests ausführen
 ```
 
+## Deployment (VPS ohne Docker, mit Caddy)
+
+```bash
+sudo apt install -y postgresql                         # Datenbank installieren
+sudo -u postgres createuser -P empfang                 # DB-Benutzer anlegen (fragt nach Passwort)
+sudo -u postgres createdb -O empfang empfang           # Datenbank anlegen
+git clone https://github.com/alfredlog/empfang-ki.git && cd empfang-ki
+npm ci --omit=dev                                      # Abhängigkeiten installieren
+cp .env.example .env && nano .env                      # Konfiguration ausfüllen
+npm run seed                                           # Tabellen + Demo-Betriebe anlegen
+sudo cp infra/empfang-ki.service /etc/systemd/system/ && sudo systemctl enable --now empfang-ki
+```
+
+Dann den Block aus `infra/Caddyfile.example` in `/etc/caddy/Caddyfile` einfügen und `sudo systemctl reload caddy`.
+
 ## Deployment (VPS mit Docker)
 
 ```bash
