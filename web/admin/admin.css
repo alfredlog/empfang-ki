@@ -175,3 +175,6 @@ code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; b
 @media (max-width: 860px) { .plans-pick { grid-template-columns: 1fr; } }
 
 .brand-mark { width: 26px; height: 26px; display: block; flex: none; }
+
+.qr-row { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
+.qr { border: 1px solid var(--line); border-radius: 8px; background: #fff; }

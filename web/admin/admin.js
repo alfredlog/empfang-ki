@@ -376,8 +376,15 @@
       <div class="panel">
         <h2>Eigene Chat-Seite</h2>
         <p class="hint">Für Betriebe ohne Website: als Link für Google Maps, Instagram, E-Mail-Signatur oder als QR-Code.</p>
-        <div class="copy-row"><a href="${esc(t.hostedUrl)}" target="_blank" rel="noopener">${esc(t.hostedUrl)}</a>
-          <button class="btn btn-secondary" type="button" id="copy-hosted">Link kopieren</button></div>
+        <div class="qr-row">
+          <img class="qr" src="/api/v1/hosted/${esc(t.slug)}/qr.svg" alt="QR-Code zur Chat-Seite" width="132" height="132">
+          <div>
+            <div class="copy-row"><a href="${esc(t.hostedUrl)}" target="_blank" rel="noopener">${esc(t.hostedUrl)}</a>
+              <button class="btn btn-secondary" type="button" id="copy-hosted">Link kopieren</button></div>
+            <p class="hint" style="margin-top:10px">QR-Code für Visitenkarte, Flyer, Schaufenster oder Rechnung. Wer ihn scannt, landet direkt im Chat.</p>
+            <a class="btn btn-secondary" href="/api/v1/hosted/${esc(t.slug)}/qr.svg?download=1">QR-Code herunterladen</a>
+          </div>
+        </div>
       </div>
       <div class="panel">
         <h2>Diesen Monat</h2>

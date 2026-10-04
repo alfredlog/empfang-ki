@@ -29,11 +29,12 @@ Empfang KI ist ein KI-Assistent für die Website kleiner Betriebe in Darmstadt, 
 Handwerk, Hausverwaltungen, Kosmetik- und Friseurstudios, Autovermietungen und Werkstätten, Arztpraxen, Kanzleien und Steuerberatungen sowie andere kleine Betriebe. Jede Branche hat eine eigene Vorlage mit passenden Fragen und Regeln.
 
 # Preise
+Alle Pakete enthalten alle Funktionen (Antworten aus Website/PDFs, Anfragen per E-Mail und im Dashboard, offene Fragen, Wissen selbst ändern, eigene Farben und Begrüßung, Einbau auf mehreren Websites, eigene Chat-Seite, Einrichtung durch uns). Die Pakete unterscheiden sich nur in der Anzahl der Gespräche pro Monat.
 Gründerpreise für die ersten zehn Betriebe aus der Region, garantiert für zwölf Monate, ohne Einrichtungsgebühr:
-Starter: 29 € pro Monat (später 49 €), bis 200 Gespräche, Antworten aus den Infos des Betriebs, Anfragen per E-Mail.
-Business: 59 € pro Monat (später 99 €), bis 600 Gespräche, zusätzlich Übersicht aller Anfragen, offene Fragen/Wissenslücken, eigene Farben und Begrüßung.
-Pro: 99 € pro Monat (später 179 €), bis 1.500 Gespräche, mehrere Standorte, persönliche Einrichtung und Pflege.
-Monatlich kündbar.
+Starter: 29 € pro Monat (später 49 €), bis 200 Gespräche.
+Business: 59 € pro Monat (später 99 €), bis 600 Gespräche.
+Pro: 99 € pro Monat (später 179 €), bis 1.500 Gespräche.
+Neue Kunden können den Assistenten 14 Tage kostenlos testen. Monatlich kündbar.
 
 # Einbau
 Der Betrieb gibt seine Infos (Website, Preisliste, Stichpunkte). Danach wird eine Zeile Code in die Website eingefügt; das funktioniert mit WordPress, Jimdo, Wix und allen anderen Websites. Die Einrichtung übernehmen wir auf Wunsch. Betriebe ohne Website bekommen eine eigene Chat-Seite mit Link und QR-Code.

@@ -1,6 +1,7 @@
 // Öffentliche API für das Widget. Jede Anfrage enthält den Public Key (data-bot-id);
 // daran erkennt der Server, zu welchem Unternehmen der Chat gehört.
 import { Router } from 'express';
+import QRCode from 'qrcode';
 import { rateLimit, ipKeyGenerator } from 'express-rate-limit';
 import { config } from '../config.js';
 import { applyCors, isOriginAllowed, preflight, requestOrigin } from '../middleware/security.js';
@@ -40,6 +41,19 @@ publicRouter.get('/hosted/:slug', async (req, res) => {
   const tenant = await getTenantBySlug(req.params.slug);
   if (!tenant) return res.status(404).json({ error: 'not_found' });
   res.json({ key: tenant.public_key, ...publicWidgetConfig(tenant) });
+});
+
+/** QR-Code zur gehosteten Chat-Seite (SVG), z. B. für Visitenkarte, Flyer oder Schaufenster. */
+publicRouter.get('/hosted/:slug/qr.svg', async (req, res) => {
+  const tenant = await getTenantBySlug(req.params.slug);
+  if (!tenant) return res.status(404).end();
+  const svg = await QRCode.toString(`${config.publicUrl}/c/${tenant.slug}`, {
+    type: 'svg', margin: 2, errorCorrectionLevel: 'M', color: { dark: '#1b2a3a', light: '#ffffff' },
+  });
+  res.setHeader('Content-Type', 'image/svg+xml');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  if (req.query.download) res.setHeader('Content-Disposition', `attachment; filename="qr-${tenant.slug}.svg"`);
+  res.send(svg);
 });
 
 const chatLimiter = rateLimit({
