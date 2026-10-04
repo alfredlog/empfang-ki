@@ -2,7 +2,7 @@
 
 **Der digitale Empfang für die Website kleiner Betriebe.** Ein KI-Assistent, der Kundenfragen rund um die Uhr beantwortet, Anfragen (Angebot, Termin, Rückruf, Schadensmeldung) strukturiert aufnimmt und per E-Mail an den Betrieb weiterleitet. Für Handwerksbetriebe, Hausverwaltungen, Studios, Werkstätten, Praxen und Kanzleien in der Region Rhein-Main/Rhein-Neckar.
 
-Live-Demo: **https://chatbot.pdf-libre.de**
+Live-Demo: **https://empfang-ki.de**
 
 ## Funktionen
 
@@ -126,7 +126,7 @@ Neue Kunden starten in einer Testphase (`TRIAL_DAYS`, Standard 14 Tage). Läuft 
 
 1. **Produkte:** Im Stripe-Dashboard unter *Produktkatalog* drei Produkte mit **monatlichem** Preis anlegen (Starter 29 €, Business 59 €, Pro 99 €) und die Preis-IDs (`price_…`) in `STRIPE_PRICE_STARTER/BUSINESS/PRO` eintragen.
 2. **API-Schlüssel:** *Entwickler → API-Schlüssel* → geheimen Schlüssel in `STRIPE_SECRET_KEY` (zum Testen zuerst `sk_test_…`).
-3. **Webhook:** *Entwickler → Webhooks → Endpunkt hinzufügen*, URL `https://chatbot.pdf-libre.de/api/stripe/webhook`, Events: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`, `invoice.payment_failed`. Das Signatur-Geheimnis (`whsec_…`) in `STRIPE_WEBHOOK_SECRET`.
+3. **Webhook:** *Entwickler → Webhooks → Endpunkt hinzufügen*, URL `https://empfang-ki.de/api/stripe/webhook`, Events: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`, `invoice.payment_failed`. Das Signatur-Geheimnis (`whsec_…`) in `STRIPE_WEBHOOK_SECRET`.
 4. **Kundenportal:** *Einstellungen → Billing → Kundenportal* aktivieren (Rechnungen, Zahlungsmethode, Kündigung).
 5. App neu starten. Im Testmodus mit der Testkarte `4242 4242 4242 4242` ausprobieren.
 

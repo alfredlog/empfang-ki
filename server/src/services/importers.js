@@ -6,7 +6,7 @@ import * as cheerio from 'cheerio';
 import { extractText, getDocumentProxy } from 'unpdf';
 import { completeText } from './llm.js';
 
-const UA = 'Mozilla/5.0 (compatible; EmpfangKI-Import/1.0; +https://chatbot.pdf-libre.de)';
+const UA = 'Mozilla/5.0 (compatible; EmpfangKI-Import/1.0; +https://empfang-ki.de)';
 const MAX_PAGE_CHARS = 8000;
 const MAX_TOTAL_CHARS = 80000;
 

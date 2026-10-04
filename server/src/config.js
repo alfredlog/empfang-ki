@@ -6,7 +6,7 @@ const int = (v, d) => (v === undefined || v === '' ? d : Number.parseInt(v, 10))
 export const config = {
   env: env.NODE_ENV || 'development',
   port: int(env.PORT, 3000),
-  // Öffentliche Adresse dieser App, z. B. https://chatbot.pdf-libre.de
+  // Öffentliche Adresse dieser App, z. B. https://empfang-ki.de
   publicUrl: (env.PUBLIC_URL || 'http://localhost:3000').replace(/\/$/, ''),
 
   databaseUrl: env.DATABASE_URL || 'postgres://empfang:empfang@localhost:5432/empfang',

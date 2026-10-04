@@ -1,9 +1,21 @@
-# In die bestehende Caddyfile auf dem Server einfügen.
-# Caddy holt das SSL-Zertifikat automatisch.
-chatbot.pdf-libre.de {
+# In /etc/caddy/Caddyfile einfügen. Caddy holt die SSL-Zertifikate automatisch (kostenlos, Let's Encrypt).
+
+# Hauptdomain
+empfang-ki.de {
 	encode gzip
 	reverse_proxy 127.0.0.1:3010 {
 		# Antworten sofort durchreichen (wichtig für das Streaming im Chat)
 		flush_interval -1
 	}
+}
+
+# www → ohne www
+www.empfang-ki.de {
+	redir https://empfang-ki.de{uri} permanent
+}
+
+# Alte Demo-Adresse weiterleiten (Links in Mails, Code-Zeilen bleiben gültig)
+# 308 behält die Methode bei (auch POST-Anfragen des Chats funktionieren weiter)
+chatbot.pdf-libre.de {
+	redir https://empfang-ki.de{uri} 308
 }
