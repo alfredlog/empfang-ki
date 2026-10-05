@@ -13,9 +13,5 @@ empfang-ki.de {
 www.empfang-ki.de {
 	redir https://empfang-ki.de{uri} permanent
 }
-
-# Alte Demo-Adresse weiterleiten (Links in Mails, Code-Zeilen bleiben gültig)
-# 308 behält die Methode bei (auch POST-Anfragen des Chats funktionieren weiter)
-chatbot.pdf-libre.de {
-	redir https://empfang-ki.de{uri} 308
+ 308
 }

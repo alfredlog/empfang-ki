@@ -687,7 +687,7 @@
             <div class="field"><label for="s-city">Stadt</label><input id="s-city" type="text" value="${esc(t.city || '')}"></div>
             <div class="field"><label for="s-email">E-Mail für Anfragen</label><input id="s-email" type="email" value="${esc(t.contact_email || '')}"></div>
             <div class="field"><label for="s-phone">Telefon</label><input id="s-phone" type="tel" value="${esc(t.phone || '')}"></div>
-            ${IS_ADMIN ? `<div class="field"><label for="s-plan">Paket</label><select id="s-plan">${planOptions(t.plan)}</select></div>` : `<div class="field"><label>Paket</label><p style="margin:6px 0 0">${esc(planLabel(t.plan))}</p><p class="hint">Paket ändern oder kündigen: <a href="mailto:support@pdf-libre.de">support@pdf-libre.de</a></p></div>`}
+            ${IS_ADMIN ? `<div class="field"><label for="s-plan">Paket</label><select id="s-plan">${planOptions(t.plan)}</select></div>` : `<div class="field"><label>Paket</label><p style="margin:6px 0 0">${esc(planLabel(t.plan))}</p><p class="hint">Paket ändern oder kündigen: <a href="mailto:support@empfang-ki.de">support@empfang-ki.de</a></p></div>`}
             <div class="field"><label for="s-origins">Freigeschaltete Domains</label><input id="s-origins" type="text" value="${esc(t.allowed_origins.map((o) => o.replace(/^https?:\/\//, '')).filter((o, i, a) => !(o.startsWith('www.') && a.includes(o.slice(4)))).join(', '))}" placeholder="beispiel.de, shop.beispiel.de">
               <p class="hint">Auf diesen Websites darf der Chat laufen. Mehrere durch Komma trennen, „www.“ wird automatisch ergänzt.</p></div>
           </div>
@@ -810,7 +810,7 @@
           <button class="btn btn-primary" type="button" id="s-portal">Abo verwalten</button></div>`;
       } else if (b.method === 'manual' && b.status === 'active') {
         html += `<div class="panel"><h2>Zahlung per Rechnung</h2><p>Sie zahlen per Rechnung. Ihr Assistent ist bezahlt bis <strong>${esc(fmtDay(b.paidUntil))}</strong>.</p>
-          <p class="hint">Fragen zur Rechnung: <a href="mailto:support@pdf-libre.de">support@pdf-libre.de</a></p></div>`;
+          <p class="hint">Fragen zur Rechnung: <a href="mailto:support@empfang-ki.de">support@empfang-ki.de</a></p></div>`;
       } else if (b.stripeEnabled) {
         html += `<div class="panel"><h2>Abo abschließen</h2><p class="hint">Monatlich kündbar. Die Zahlung läuft sicher über Stripe (Karte, SEPA-Lastschrift u. a.). Ihr Assistent wird direkt nach der Zahlung eingeschaltet.</p>
           <div class="plans-pick">${paidPlans.map((k) => `
@@ -818,7 +818,7 @@
               <span><strong>${esc(state.plans[k].label)}</strong><span class="price-sm">${state.plans[k].priceEur} € / Monat</span><span class="hint">bis ${fmtNum(state.plans[k].monthlyConversations)} Gespräche</span></span></label>`).join('')}</div>
           <button class="btn btn-primary" type="button" id="s-subscribe" style="margin-top:14px">Weiter zur Zahlung</button></div>`;
       } else {
-        html += `<div class="panel"><h2>Abo abschließen</h2><p>Für ein Abo schreiben Sie uns bitte an <a href="mailto:support@pdf-libre.de">support@pdf-libre.de</a>.</p></div>`;
+        html += `<div class="panel"><h2>Abo abschließen</h2><p>Für ein Abo schreiben Sie uns bitte an <a href="mailto:support@empfang-ki.de">support@empfang-ki.de</a>.</p></div>`;
       }
     }
 
