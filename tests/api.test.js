@@ -337,3 +337,63 @@ test('Übersicht und Monatsbericht-Vorschau', opts, async () => {
     await query('DELETE FROM tenants WHERE id = $1', [t.id]);
   }
 });
+
+test('Freie Termine: eintragen, anbieten, buchen, Vergangenes ignorieren', opts, async () => {
+  const { createLead, buildSystemBlocks } = await import('../server/src/services/chat.js');
+  const { freeSlots } = await import('../server/src/services/slots.js');
+  const T = `${base}/api/admin/tenants/${tenantId}`;
+  const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin' }).format(new Date(Date.now() + 3 * 864e5));
+
+  // Zwei Uhrzeiten, zwei Wochen → 4 Termine
+  let res = await fetch(`${T}/slots`, { method: 'POST', headers: admin, body: JSON.stringify({ date: day, times: ['09:00', '14:30'], durationMin: 45, repeatWeeks: 2 }) });
+  assert.equal(res.status, 201);
+  assert.equal((await res.json()).created, 4);
+  // Doppelt eintragen erzeugt nichts Neues
+  res = await fetch(`${T}/slots`, { method: 'POST', headers: admin, body: JSON.stringify({ date: day, times: ['09:00'] }) });
+  assert.equal((await res.json()).created, 0);
+  // Ungültige Uhrzeit wird abgelehnt
+  res = await fetch(`${T}/slots`, { method: 'POST', headers: admin, body: JSON.stringify({ date: day, times: ['25:00'] }) });
+  assert.equal(res.status, 400);
+
+  // Ein vergangener Termin wird nie angeboten
+  await query(`INSERT INTO appointment_slots (tenant_id, starts_at) VALUES ($1, now() - interval '2 hours')`, [tenantId]);
+  const free = await freeSlots(tenantId);
+  assert.equal(free.length, 4);
+  assert.ok(free.every((s) => new Date(s.starts_at) > new Date()));
+
+  // Der Assistent bekommt die Termine im Prompt
+  const { rows: [tenant] } = await query('SELECT * FROM tenants WHERE id = $1', [tenantId]);
+  const blocks = buildSystemBlocks(tenant, { mode: 'full', text: 'x' }, free);
+  const last = blocks[blocks.length - 1].text;
+  assert.match(last, /FREIE TERMINE/);
+  assert.ok(last.includes(free[0].id));
+  assert.match(last, /09:00 Uhr/);
+
+  // Buchen
+  const input = { art: 'termin', name: 'Eva Test', telefon: '0151 1111111', zusammenfassung: 'Möchte einen Termin.', termin_id: free[0].id };
+  const ok = await createLead(tenant, null, input);
+  assert.equal(ok.ok, true);
+  assert.equal(ok.lead.kind, 'termin');
+  assert.match(ok.lead.details['Gebuchter Termin'], /Uhr/);
+  // Doppelbuchung wird verhindert und legt keine zweite Anfrage an
+  const before = (await query('SELECT count(*)::int AS n FROM leads WHERE tenant_id = $1', [tenantId])).rows[0].n;
+  const twice = await createLead(tenant, null, { ...input, name: 'Max Zweit' });
+  assert.equal(twice.ok, false);
+  assert.match(twice.error, /nicht mehr frei/);
+  assert.equal((await query('SELECT count(*)::int AS n FROM leads WHERE tenant_id = $1', [tenantId])).rows[0].n, before);
+  assert.equal((await freeSlots(tenantId)).length, 3);
+
+  // Dashboard zeigt den gebuchten Termin mit Namen
+  res = await fetch(`${T}/slots`, { headers: admin });
+  const list = await res.json();
+  const booked = list.find((s) => s.id === free[0].id);
+  assert.equal(booked.lead_name, 'Eva Test');
+
+  // Wieder freigeben und löschen
+  res = await fetch(`${T}/slots/${free[0].id}/release`, { method: 'POST', headers: admin });
+  assert.equal((await res.json()).released, 1);
+  assert.equal((await freeSlots(tenantId)).length, 4);
+  res = await fetch(`${T}/slots/${free[1].id}`, { method: 'DELETE', headers: admin });
+  assert.equal((await res.json()).deleted, 1);
+  assert.equal((await freeSlots(tenantId)).length, 3);
+});

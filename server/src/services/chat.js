@@ -2,11 +2,12 @@
 // Claude antworten lassen (Streaming), Anfragen per Werkzeug erfassen, alles speichern.
 import { z } from 'zod';
 import { config } from '../config.js';
-import { query } from '../db/pool.js';
+import { query, withTransaction } from '../db/pool.js';
 import { buildSystemPrompt, getIndustry } from '../templates/industries.js';
 import { retrieveContext } from './knowledge.js';
 import { streamCompletion } from './llm.js';
 import { sendLeadEmail } from './mailer.js';
+import { bookSlot, formatSlot, freeSlots, slotsPromptBlock } from './slots.js';
 import { PLANS, monthlyUsage, recordUsage } from './tenants.js';
 
 export class ChatError extends Error {
@@ -26,8 +27,9 @@ export function stripEmoji(text) {
   return text.replace(EMOJI_RE, '').replace(/[ \t]{2,}/g, ' ').replace(/ +([.,!?])/g, '$1');
 }
 
-export function leadTool(tenant) {
-  const kinds = getIndustry(tenant.industry).leadKinds;
+export function leadTool(tenant, { withSlots = false } = {}) {
+  const base = getIndustry(tenant.industry).leadKinds;
+  const kinds = withSlots && !base.includes('termin') ? ['termin', ...base] : base;
   return {
     name: 'anfrage_erstellen',
     description:
@@ -42,6 +44,7 @@ export function leadTool(tenant) {
         email: { type: 'string', description: 'E-Mail-Adresse (falls angegeben)' },
         zusammenfassung: { type: 'string', description: 'Anliegen in 1–3 sachlichen Sätzen für das Team, IMMER auf Deutsch (auch wenn der Besucher eine andere Sprache spricht; dann die Sprache des Besuchers kurz nennen)' },
         offene_frage: { type: 'string', description: 'Nur bei art "offene_frage": die Frage, die du nicht beantworten konntest, möglichst im Wortlaut' },
+        ...(withSlots ? { termin_id: { type: 'string', description: 'Nur wenn ein Termin aus FREIE TERMINE gebucht wird: die Kennung aus den eckigen Klammern' } } : {}),
         details: {
           type: 'object',
           description: 'Weitere strukturierte Angaben auf Deutsch, z. B. {"Wunschtermin": "Do vormittags", "Ort": "64283 Darmstadt"}',
@@ -61,32 +64,58 @@ const leadSchema = z
     email: z.string().trim().max(160).optional(),
     zusammenfassung: z.string().trim().min(3).max(1500),
     offene_frage: z.string().trim().max(1000).optional(),
+    termin_id: z.string().trim().max(64).optional(),
     details: z.record(z.string(), z.string().max(500)).optional(),
   })
   .refine((v) => v.telefon || v.email, { message: 'Telefon oder E-Mail fehlt' });
 
-async function createLead(tenant, conversationId, input) {
+export async function createLead(tenant, conversationId, input) {
   const parsed = leadSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: `Anfrage unvollständig: ${parsed.error.issues.map((i) => i.message).join(', ')}. Bitte die fehlenden Angaben erfragen.` };
   }
   const v = parsed.data;
   const kinds = getIndustry(tenant.industry).leadKinds;
-  const kind = kinds.includes(v.art) ? v.art : 'sonstiges';
+  const slotId = v.termin_id && /^[0-9a-f-]{36}$/i.test(v.termin_id) ? v.termin_id : null;
+  if (v.termin_id && !slotId) return { ok: false, error: 'Unbekannte Termin-Kennung. Nur Termine aus FREIE TERMINE anbieten.' };
+  const kind = slotId ? 'termin' : (kinds.includes(v.art) ? v.art : 'sonstiges');
   const details = Object.fromEntries(Object.entries(v.details || {}).slice(0, 12));
-  const { rows } = await query(
-    `INSERT INTO leads (tenant_id, conversation_id, kind, name, phone, email, summary, details, open_question)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-    [tenant.id, conversationId, kind, v.name, v.telefon || null, v.email || null, v.zusammenfassung, details, v.offene_frage || null],
-  );
-  const lead = rows[0];
+
+  let lead;
+  let slot = null;
+  try {
+    await withTransaction(async (db) => {
+      const { rows } = await db.query(
+        `INSERT INTO leads (tenant_id, conversation_id, kind, name, phone, email, summary, details, open_question)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+        [tenant.id, conversationId, kind, v.name, v.telefon || null, v.email || null, v.zusammenfassung, details, v.offene_frage || null],
+      );
+      lead = rows[0];
+      if (slotId) {
+        slot = await bookSlot(tenant.id, slotId, lead.id, db);
+        if (!slot) throw new ChatError('slot_taken', 'Termin nicht mehr frei');
+        const termin = `${formatSlot(slot.starts_at)} (${slot.duration_min} Min.)`;
+        const { rows: upd } = await db.query(
+          `UPDATE leads SET details = details || jsonb_build_object('Gebuchter Termin', $2::text) WHERE id = $1 RETURNING *`,
+          [lead.id, termin],
+        );
+        lead = upd[0];
+      }
+    });
+  } catch (err) {
+    if (err.code === 'slot_taken') {
+      return { ok: false, error: 'Dieser Termin ist leider nicht mehr frei. Entschuldige dich kurz und biete andere freie Termine an.' };
+    }
+    throw err;
+  }
+
   try {
     const { sent } = await sendLeadEmail(tenant, lead);
     if (sent) await query('UPDATE leads SET notified_at = now() WHERE id = $1', [lead.id]);
   } catch (err) {
     console.error('[mail] Versand fehlgeschlagen:', err.message);
   }
-  return { ok: true, lead };
+  return { ok: true, lead, slot };
 }
 
 function berlinNow() {
@@ -96,14 +125,15 @@ function berlinNow() {
 }
 
 /** Baut die System-Blöcke. Statischer Teil (+ ggf. ganze Wissensbasis) wird gecacht. */
-export function buildSystemBlocks(tenant, context) {
+export function buildSystemBlocks(tenant, context, slots = []) {
   const base = buildSystemPrompt(tenant);
   const knowledge = `UNTERNEHMENSINFORMATIONEN (einzige Quelle für Fakten):\n---\n${context.text || '(Noch keine Informationen hinterlegt.)'}\n---`;
   const now = {
     text:
       `Aktuelles Datum und Uhrzeit (Deutschland): ${berlinNow()}. Nutze das, um z. B. zu sagen, ob gerade geöffnet ist.\n\n` +
       'WICHTIG BEI JEDER ANTWORT: Sie-Form, keine Emojis. Steht die Antwort nicht ausdrücklich in den Unternehmensinformationen, ' +
-      'sag „Dazu habe ich leider keine Angabe“ und biete an, die Frage an das Team weiterzugeben.',
+      'sag „Dazu habe ich leider keine Angabe“ und biete an, die Frage an das Team weiterzugeben.' +
+      (slots.length ? `\n\n${slotsPromptBlock(slots)}` : ''),
   };
   if (context.mode === 'full') return [{ text: `${base}\n\n${knowledge}`, cache: true }, now];
   return [{ text: base, cache: true }, { text: knowledge }, now];
@@ -185,8 +215,9 @@ export async function handleChatTurn({ tenant, conversationId, visitorId, origin
 
   // 2) Wissen abrufen und Prompt bauen
   const context = await retrieveContext(tenant.id, `${history.filter((m) => m.role === 'user').slice(-2).map((m) => m.content).join(' ')} ${text}`);
-  const system = buildSystemBlocks(tenant, context);
-  const tools = [leadTool(tenant)];
+  const slots = await freeSlots(tenant.id);
+  const system = buildSystemBlocks(tenant, context, slots);
+  const tools = [leadTool(tenant, { withSlots: slots.length > 0 })];
   const messages = [...history, { role: 'user', content: text }];
 
   // 3) Antwort generieren, ggf. Werkzeug ausführen und weiter antworten
@@ -225,9 +256,11 @@ export async function handleChatTurn({ tenant, conversationId, visitorId, origin
       if (tu.name === 'anfrage_erstellen') {
         const r = await createLead(tenant, conversation.id, tu.input);
         if (r.ok) emit('lead', { kind: r.lead.kind });
-        output = r.ok
-          ? { status: 'gespeichert', hinweis: 'Das Team wurde benachrichtigt und meldet sich. Bestätige dem Besucher kurz und freundlich.' }
-          : { status: 'fehler', hinweis: r.error };
+        output = !r.ok
+          ? { status: 'fehler', hinweis: r.error }
+          : r.slot
+            ? { status: 'termin_gebucht', termin: formatSlot(r.slot.starts_at), hinweis: 'Der Termin ist für den Besucher eingetragen und das Team ist informiert. Bestätige Datum und Uhrzeit kurz und freundlich.' }
+            : { status: 'gespeichert', hinweis: 'Das Team wurde benachrichtigt und meldet sich. Bestätige dem Besucher kurz und freundlich.' };
       } else {
         output = { status: 'fehler', hinweis: 'Unbekanntes Werkzeug' };
       }

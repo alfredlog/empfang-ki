@@ -294,7 +294,7 @@
   // ------------------------------------------------------------ Kundenansicht
   const TABS = [
     ['uebersicht', 'Übersicht'], ['einbau', 'Einbau'], ['wissen', 'Wissen'], ['anfragen', 'Anfragen'], ['fragen', 'Offene Fragen'],
-    ['gespraeche', 'Gespräche'], ['einstellungen', 'Einstellungen'], ['abrechnung', 'Abrechnung'],
+    ['termine', 'Termine'], ['gespraeche', 'Gespräche'], ['einstellungen', 'Einstellungen'], ['abrechnung', 'Abrechnung'],
     ...(IS_ADMIN ? [['zugaenge', 'Zugänge']] : []),
   ];
 
@@ -348,7 +348,7 @@
       window.EmpfangKI.use(t.public_key, { open: true });
     });
     const body = $('#tab-body');
-    ({ einbau: tabEinbau, wissen: tabWissen, anfragen: tabAnfragen, fragen: tabFragen, gespraeche: tabGespraeche, einstellungen: tabEinstellungen, abrechnung: tabAbrechnung, zugaenge: tabZugaenge, uebersicht: tabUebersicht })[state.tab](body, t);
+    ({ einbau: tabEinbau, wissen: tabWissen, anfragen: tabAnfragen, fragen: tabFragen, termine: tabTermine, gespraeche: tabGespraeche, einstellungen: tabEinstellungen, abrechnung: tabAbrechnung, zugaenge: tabZugaenge, uebersicht: tabUebersicht })[state.tab](body, t);
   }
 
   // --- Übersicht: Zahlen des Monats, Anfragen, häufigste Fragen (+ Monatsbericht im Admin)
@@ -619,6 +619,77 @@
   }
 
   // --- Offene Fragen (Wissenslücken)
+  async function tabTermine(body, t) {
+    body.innerHTML = '<div class="progress"><span class="spinner"></span>Lade Termine …</div>';
+    const slots = await api(T(t) + '/slots').catch((e) => { toast(e.message, true); return []; });
+    const now = Date.now();
+    const upcoming = slots.filter((s) => new Date(s.starts_at).getTime() > now);
+    const dayKey = (d) => new Intl.DateTimeFormat('de-DE', { timeZone: 'Europe/Berlin', weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(d));
+    const time = (d) => new Intl.DateTimeFormat('de-DE', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' }).format(new Date(d));
+    const groups = [];
+    for (const s of upcoming) {
+      const k = dayKey(s.starts_at);
+      if (!groups.length || groups[groups.length - 1].k !== k) groups.push({ k, items: [] });
+      groups[groups.length - 1].items.push(s);
+    }
+    const free = upcoming.filter((s) => !s.booked_at).length;
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin' }).format(new Date());
+    body.innerHTML = `
+      <p class="hint" style="margin:0 0 14px">Tragen Sie hier freie Termine ein. Der Assistent bietet sie Kunden im Chat an und bucht sie direkt. Gebuchte Termine erscheinen hier mit Namen und kommen zusätzlich als Anfrage per E-Mail. Vergangene Termine werden automatisch nicht mehr angeboten.</p>
+      <div class="panel">
+        <h2>Freie Termine eintragen</h2>
+        <form id="sl-form" class="grid-form">
+          <div class="field"><label for="sl-date">Datum</label><input id="sl-date" type="date" min="${today}" value="${today}" required></div>
+          <div class="field"><label for="sl-times">Uhrzeiten</label><input id="sl-times" type="text" placeholder="z. B. 09:00, 10:30, 14:00" required></div>
+          <div class="field"><label for="sl-dur">Dauer (Minuten)</label><input id="sl-dur" type="number" min="5" max="480" step="5" value="30"></div>
+          <div class="field"><label for="sl-rep">Wöchentlich wiederholen</label><select id="sl-rep">${[1, 2, 3, 4, 6, 8, 12].map((n) => `<option value="${n}">${n === 1 ? 'nur dieser Tag' : `${n} Wochen`}</option>`).join('')}</select></div>
+          <div class="field" style="grid-column:1/-1"><label for="sl-note">Hinweis (optional)</label><input id="sl-note" type="text" maxlength="120" placeholder="z. B. Besichtigung, nur Erstgespräch"></div>
+          <div><button class="btn btn-primary" id="sl-btn" type="submit">Termine speichern</button></div>
+        </form>
+      </div>
+      <div class="panel">
+        <h2>Kommende Termine <span class="row-meta">${free} frei · ${upcoming.length - free} gebucht</span></h2>
+        ${groups.length ? groups.map((g) => `
+          <h3 style="margin:16px 0 8px;font-size:15px">${esc(g.k)}</h3>
+          <div class="rows">${g.items.map((s) => `
+            <div class="row source-row">
+              <div><div class="row-title">${time(s.starts_at)} Uhr · ${s.duration_min} Min.${s.note ? ` · ${esc(s.note)}` : ''}</div>
+                <div class="row-meta">${s.booked_at
+                  ? `<strong>Gebucht</strong> von ${esc(s.lead_name || 'Kunde')}${s.lead_phone ? ` · <a href="tel:${esc(s.lead_phone.replace(/[^\d+]/g, ''))}">${esc(s.lead_phone)}</a>` : ''}${s.lead_email ? ` · <a href="mailto:${esc(s.lead_email)}">${esc(s.lead_email)}</a>` : ''}`
+                  : 'frei'}</div></div>
+              ${s.booked_at ? `<button class="btn btn-secondary" type="button" data-release="${s.id}">Wieder freigeben</button>` : ''}
+              <button class="btn btn-danger" type="button" data-del-slot="${s.id}">Löschen</button>
+            </div>`).join('')}</div>`).join('') : '<div class="empty">Noch keine kommenden Termine. Tragen Sie oben freie Zeiten ein.</div>'}
+      </div>`;
+
+    $('#sl-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const times = $('#sl-times').value.split(/[,;\s]+/).map((x) => x.trim().replace('.', ':')).filter(Boolean)
+        .map((x) => (/^\d{1,2}$/.test(x) ? `${x}:00` : x)).map((x) => x.padStart(5, '0'));
+      if (!times.length || times.some((x) => !/^([01]\d|2[0-3]):[0-5]\d$/.test(x))) return toast('Bitte Uhrzeiten wie 09:00, 14:30 eingeben.', true);
+      busy($('#sl-btn'), async () => {
+        const r = await api(T(t) + '/slots', { method: 'POST', body: {
+          date: $('#sl-date').value, times, durationMin: Number($('#sl-dur').value) || 30,
+          repeatWeeks: Number($('#sl-rep').value) || 1, note: $('#sl-note').value.trim(),
+        } });
+        toast(r.created ? `${r.created} Termin${r.created === 1 ? '' : 'e'} gespeichert ✓` : 'Keine neuen Termine (schon vorhanden oder in der Vergangenheit)');
+        tabTermine(body, t);
+      });
+    });
+    body.onclick = (e) => {
+      const del = e.target.closest('[data-del-slot]');
+      const rel = e.target.closest('[data-release]');
+      if (del) {
+        const s = upcoming.find((x) => x.id === del.dataset.delSlot);
+        if (s?.booked_at && !confirm('Dieser Termin ist gebucht. Trotzdem löschen? Bitte informieren Sie den Kunden selbst.')) return;
+        busy(del, async () => { await api(T(t) + `/slots/${del.dataset.delSlot}`, { method: 'DELETE' }); toast('Termin gelöscht'); tabTermine(body, t); });
+      } else if (rel) {
+        if (!confirm('Buchung aufheben und den Termin wieder als frei anbieten?')) return;
+        busy(rel, async () => { await api(T(t) + `/slots/${rel.dataset.release}/release`, { method: 'POST' }); toast('Termin wieder frei'); tabTermine(body, t); });
+      }
+    };
+  }
+
   async function tabFragen(body, t) {
     body.innerHTML = '<div class="progress"><span class="spinner"></span>Lade offene Fragen …</div>';
     const items = await api(T(t) + `/open-questions`).catch((e) => { toast(e.message, true); return []; });

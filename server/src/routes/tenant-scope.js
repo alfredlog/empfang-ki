@@ -16,6 +16,7 @@ import { buildMonthlyReport, getInsights, previousMonthKey, sendMonthlyReport } 
 import {
   addKnowledgeEntry, deleteChunk, deleteSource, knowledgeStats, listSources, replaceKnowledge,
 } from '../services/knowledge.js';
+import { addSlots, deleteSlot, listSlots, releaseSlot } from '../services/slots.js';
 import { PLANS, monthlyUsage, normalizeOrigins } from '../services/tenants.js';
 import { industries } from '../templates/industries.js';
 
@@ -288,6 +289,31 @@ export function buildTenantRouter({ role }) {
     const { rows } = await query('UPDATE leads SET status = $1 WHERE id = $2 AND tenant_id = $3 RETURNING *', [status, req.params.leadId, req.tenantId]);
     if (!rows[0]) return res.status(404).json({ error: 'not_found' });
     res.json(rows[0]);
+  }));
+
+  // ------------------------------------------------------------ Freie Termine
+  r.get('/slots', asyncRoute(async (req, res) => res.json(await listSlots(req.tenantId))));
+
+  r.post('/slots', asyncRoute(async (req, res) => {
+    const v = z.object({
+      date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      times: z.array(z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/)).min(1).max(24),
+      durationMin: z.number().int().min(5).max(480).default(30),
+      repeatWeeks: z.number().int().min(1).max(12).default(1),
+      note: optionalText(120),
+    }).parse(req.body);
+    const created = await addSlots(req.tenantId, v);
+    res.status(201).json({ created, slots: await listSlots(req.tenantId) });
+  }));
+
+  r.delete('/slots/:slotId', asyncRoute(async (req, res) => {
+    if (!UUID.test(req.params.slotId)) return res.status(404).json({ error: 'not_found' });
+    res.json({ deleted: await deleteSlot(req.tenantId, req.params.slotId) });
+  }));
+
+  r.post('/slots/:slotId/release', asyncRoute(async (req, res) => {
+    if (!UUID.test(req.params.slotId)) return res.status(404).json({ error: 'not_found' });
+    res.json({ released: await releaseSlot(req.tenantId, req.params.slotId) });
   }));
 
   r.get('/open-questions', asyncRoute(async (req, res) => {

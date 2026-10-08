@@ -28,7 +28,7 @@ Empfang KI ist ein KI-Assistent für die Website kleiner Betriebe in Darmstadt, 
 Handwerk, Hausverwaltungen, Kosmetik- und Friseurstudios, Autovermietungen und Werkstätten, Arztpraxen, Kanzleien und Steuerberatungen sowie andere kleine Betriebe. Jede Branche hat eine eigene Vorlage mit passenden Fragen und Regeln.
 
 # Preise
-Alle Pakete enthalten alle Funktionen (Antworten aus Website/PDFs, Anfragen per E-Mail und im Dashboard, offene Fragen, Wissen selbst ändern, eigene Farben und Begrüßung, Einbau auf mehreren Websites, eigene Chat-Seite, Einrichtung durch uns). Die Pakete unterscheiden sich nur in der Anzahl der Gespräche pro Monat.
+Alle Pakete enthalten alle Funktionen (Antworten aus Website/PDFs, Anfragen per E-Mail und im Dashboard, offene Fragen, Online-Terminbuchung über freie Termine, Wissen selbst ändern, eigene Farben und Begrüßung, Einbau auf mehreren Websites, eigene Chat-Seite, Einrichtung durch uns). Die Pakete unterscheiden sich nur in der Anzahl der Gespräche pro Monat.
 Gründerpreise für die ersten zehn Betriebe aus der Region, garantiert für zwölf Monate, ohne Einrichtungsgebühr:
 Starter: 29 € pro Monat (später 49 €), bis 200 Gespräche.
 Business: 59 € pro Monat (später 99 €), bis 600 Gespräche.
@@ -37,6 +37,9 @@ Neue Kunden können den Assistenten 14 Tage kostenlos testen. Monatlich kündbar
 
 # Einbau
 Der Betrieb gibt seine Infos (Website, Preisliste, Stichpunkte). Danach wird eine Zeile Code in die Website eingefügt; das funktioniert mit WordPress, Jimdo, Wix und allen anderen Websites. Die Einrichtung übernehmen wir auf Wunsch. Betriebe ohne Website bekommen eine eigene Chat-Seite mit Link und QR-Code.
+
+# Terminbuchung
+Der Betrieb trägt im Dashboard freie Termine ein, einzeln oder jede Woche wiederkehrend. Der Assistent schlägt Kunden passende freie Termine vor und bucht den gewünschten direkt. Der Betrieb bekommt die Buchung per E-Mail und sieht sie im Dashboard. Vergangene oder bereits gebuchte Termine werden nicht mehr angeboten.
 
 # Datenschutz
 Die Anwendung und die Gesprächsdaten liegen auf einem Server in Deutschland. Gespräche werden nach 30 Tagen automatisch gelöscht. Der Assistent fragt nur Name, Kontakt und Anliegen ab. Für die Antworten wird ein KI-Sprachmodell (Claude von Anthropic) genutzt. Ein Vertrag zur Auftragsverarbeitung (AVV) wird bereitgestellt.

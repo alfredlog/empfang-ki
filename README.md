@@ -12,6 +12,7 @@ Live-Demo: **https://empfang-ki.de**
 - **Anfragen per Tool-Use**: Claude ruft `anfrage_erstellen` auf, sobald Name, Kontakt und Anliegen bestätigt sind. Die Anfrage wird gespeichert und per E-Mail an den Betrieb geschickt.
 - **Offene Fragen und Wissenslücken**: Kann der Assistent etwas nicht beantworten, nimmt er die Kontaktdaten auf und speichert die unbeantwortete Frage. Der Betrieb ruft zurück und kann die Antwort ergänzen.
 - **Branchen-Vorlagen**: Aufgaben, Grenzen und Ton pro Branche, z. B. keine medizinische oder rechtliche Beratung, Notfall-Hinweise (112, 116 117) per deterministischer Erkennung vor dem LLM.
+- **Freie Termine buchen**: Der Betrieb trägt im Dashboard freie Termine ein (auch wöchentlich wiederholt). Der Assistent bietet passende Termine an und bucht sie direkt, mit Schutz vor Doppelbuchung. Vergangene Termine werden nie angeboten.
 - **Admin-Oberfläche** `/admin`: Kunden anlegen, Website- und PDF-Import, Code-Zeile kopieren, Anfragen und offene Fragen bearbeiten, Bot testen.
 - **Gehostete Chat-Seite** `/c/<slug>` für Betriebe ohne Website (Link/QR-Code).
 - **Datensparsamkeit**: automatische Löschung von Gesprächen nach `RETENTION_DAYS`, Origin-Prüfung, Rate-Limits, Paket-Limits pro Monat.
