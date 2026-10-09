@@ -397,3 +397,37 @@ test('Freie Termine: eintragen, anbieten, buchen, Vergangenes ignorieren', opts,
   assert.equal((await res.json()).deleted, 1);
   assert.equal((await freeSlots(tenantId)).length, 3);
 });
+
+test('Gründerpreis: beim ersten Bezahlen automatisch vergeben, im Admin änderbar', opts, async () => {
+  const T = `${base}/api/admin/tenants/${tenantId}`;
+  await query('UPDATE tenants SET founder_since = NULL WHERE id = $1', [tenantId]);
+  let res = await fetch(`${T}/billing/manual`, { method: 'POST', headers: admin, body: JSON.stringify({ months: 1 }) });
+  assert.equal(res.status, 200);
+  res = await fetch(`${T}/founder`, { headers: admin });
+  let f = await res.json();
+  assert.equal(f.isFounder, true);
+  assert.equal(f.since, new Date().toISOString().slice(0, 10));
+  assert.match(f.preview.subject, /Gründerpreis/);
+  // Kunde sieht den Gründerpreis in der Abrechnung
+  res = await fetch(`${T}/billing`, { headers: admin });
+  const b = await res.json();
+  assert.equal(b.founder.isFounder, true);
+  assert.ok(b.events.some((e) => e.type === 'gruenderpreis'));
+  // Startdatum ändern: 11,5 Monate zurück → Info-Mail ist fällig
+  const since = new Date(Date.now() - 350 * 864e5).toISOString().slice(0, 10);
+  res = await fetch(`${T}/founder`, { method: 'POST', headers: admin, body: JSON.stringify({ since }) });
+  assert.equal(res.status, 200);
+  res = await fetch(`${base}/api/admin/founders`, { headers: admin });
+  const list = await res.json();
+  const mine = list.find((x) => x.id === tenantId);
+  assert.ok(mine.noticeDue && !mine.expired);
+  // Ohne SMTP wird nichts versendet und nichts als gesendet markiert
+  const { runFounderJobs } = await import('../server/src/services/founder.js');
+  await runFounderJobs();
+  const { rows } = await query('SELECT founder_notice_sent_at FROM tenants WHERE id = $1', [tenantId]);
+  assert.equal(rows[0].founder_notice_sent_at, null);
+  // Entfernen
+  res = await fetch(`${T}/founder`, { method: 'POST', headers: admin, body: JSON.stringify({ since: null }) });
+  f = await (await fetch(`${T}/founder`, { headers: admin })).json();
+  assert.equal(f.isFounder, false);
+});

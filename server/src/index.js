@@ -6,6 +6,7 @@ import { purgeExpiredAuth } from './services/auth.js';
 import { expireTrials } from './services/billing.js';
 import { purgeOldConversations } from './services/chat.js';
 import { purgeOldSlots } from './services/slots.js';
+import { runFounderJobs } from './services/founder.js';
 import { runMonthlyReports } from './services/insights.js';
 
 await migrate();
@@ -24,6 +25,8 @@ const purge = async () => {
     await purgeOldSlots();
     const expired = await expireTrials();
     if (expired) console.log(`[billing] ${expired} Testphase(n) abgelaufen – Assistent ausgeschaltet`);
+    const founder = await runFounderJobs();
+    if (founder.notices || founder.reminders) console.log(`[gruenderpreis] ${founder.notices} Info-Mail(s), ${founder.reminders} Erinnerung(en)`);
     const reports = await runMonthlyReports();
     if (reports) console.log(`[report] ${reports} Monatsbericht(e) verschickt`);
   } catch (err) {

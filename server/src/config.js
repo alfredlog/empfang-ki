@@ -37,6 +37,8 @@ export const config = {
   retentionDays: int(env.RETENTION_DAYS, 30),
 
   adminToken: env.ADMIN_TOKEN || '',
+  // Bekommt Erinnerungen (z. B. Gründerpreis läuft ab). Standard: Absenderadresse aus MAIL_FROM
+  adminEmail: env.ADMIN_EMAIL || (env.MAIL_FROM || '').match(/[\w.+-]+@[\w.-]+/)?.[0] || '',
 
   // Testphase für neue Kunden (Tage); danach wird der Assistent ohne Zahlung ausgeschaltet
   trialDays: int(env.TRIAL_DAYS, 14),

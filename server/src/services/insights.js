@@ -143,7 +143,7 @@ export async function buildMonthlyReport(tenantId, monthKey = previousMonthKey()
   return { tenant, subject, text, html, stats: s, themes };
 }
 
-async function reportRecipients(tenant) {
+export async function reportRecipients(tenant) {
   const { rows } = await query('SELECT email FROM tenant_users WHERE tenant_id = $1', [tenant.id]);
   return [...new Set([tenant.contact_email, ...rows.map((r) => r.email)].filter(Boolean).map((e) => e.toLowerCase()))];
 }

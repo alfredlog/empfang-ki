@@ -4,9 +4,9 @@ import { getIndustry } from '../templates/industries.js';
 
 // Gründerpreise für die ersten zehn Kunden, 12 Monate ab Vertragsbeginn garantiert (danach: 49 / 99 / 179 €)
 export const PLANS = {
-  starter: { label: 'Starter', priceEur: 29, monthlyConversations: 200 },
-  business: { label: 'Business', priceEur: 59, monthlyConversations: 600 },
-  pro: { label: 'Pro', priceEur: 99, monthlyConversations: 1500 },
+  starter: { label: 'Starter', priceEur: 29, regularEur: 49, monthlyConversations: 200 },
+  business: { label: 'Business', priceEur: 59, regularEur: 99, monthlyConversations: 600 },
+  pro: { label: 'Pro', priceEur: 99, regularEur: 179, monthlyConversations: 1500 },
   demo: { label: 'Demo', priceEur: 0, monthlyConversations: 5000 },
 };
 

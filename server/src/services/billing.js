@@ -5,6 +5,7 @@
 import Stripe from 'stripe';
 import { config } from '../config.js';
 import { query, withTransaction } from '../db/pool.js';
+import { autoAssignFounder, founderInfo } from './founder.js';
 import { PLANS } from './tenants.js';
 
 let stripeClient;
@@ -43,6 +44,7 @@ export async function billingEvents(tenantId) {
 
 /** Status für die Oberfläche (Admin und Kunde). */
 export function billingSummary(t) {
+  const founder = founderInfo(t);
   const plan = PLANS[t.plan] || null;
   const today = new Date().toISOString().slice(0, 10);
   const paidUntil = t.paid_until ? String(t.paid_until).slice(0, 10) : null;
@@ -57,6 +59,7 @@ export function billingSummary(t) {
     overdue: t.billing_method === 'manual' && paidUntil !== null && paidUntil < today,
     stripeCustomer: Boolean(t.stripe_customer_id),
     stripeEnabled: stripeEnabled(),
+    founder,
   };
 }
 
@@ -73,6 +76,8 @@ export async function markPaidManually(tenantId, { months = 1, note } = {}) {
       [tenantId, months],
     );
     if (!rows[0]) return null;
+    const founderSince = await autoAssignFounder(db, tenantId);
+    if (founderSince) await logBillingEvent(db, { tenantId, source: 'system', type: 'gruenderpreis', detail: { since: founderSince } });
     await logBillingEvent(db, {
       tenantId, source: 'manual', type: 'bezahlt',
       detail: { months, paidUntil: rows[0].paid_until, plan: rows[0].plan, note: note || undefined },
@@ -218,6 +223,8 @@ export async function handleStripeEvent(event) {
          WHERE id = $1`,
         [tenantId, obj.customer || null, obj.subscription || null, plan],
       );
+      const founderSince = await autoAssignFounder(db, tenantId);
+      if (founderSince) await logBillingEvent(db, { tenantId, source: 'system', type: 'gruenderpreis', detail: { since: founderSince } });
       type = 'stripe_bezahlt';
       detail = { plan, amountEur: obj.amount_total != null ? obj.amount_total / 100 : undefined };
     } else if (event.type === 'customer.subscription.created' || event.type === 'customer.subscription.updated' || event.type === 'customer.subscription.deleted') {

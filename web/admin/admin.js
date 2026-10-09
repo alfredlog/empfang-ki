@@ -176,6 +176,16 @@
     renderTenantList();
   }
 
+  // Gründerpreis: Ablauf = Start + 12 Monate
+  function founderEnd(since) {
+    const d = new Date(`${String(since).slice(0, 10)}T00:00:00Z`);
+    return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 12, d.getUTCDate()));
+  }
+  function founderDaysLeft(since) {
+    const today = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`);
+    return Math.round((founderEnd(since) - today) / 864e5);
+  }
+
   function renderTenantList() {
     if (!IS_ADMIN) return;
     const q = $('#tenant-filter').value.trim().toLowerCase();
@@ -185,6 +195,7 @@
     const item = (t) => `<li><button type="button" data-id="${t.id}" aria-current="${state.current?.id === t.id}">
         <span class="t-name">${esc(t.name)}${t.active ? '' : ' <span class="muted">(aus)</span>'}</span>
         <span class="t-meta">${t.plan === 'demo' ? `${esc(industryLabel(t.industry))}${t.city ? `, ${esc(t.city)}` : ''}` : `<span class="dot ${listBilling(t).cls}"></span>${esc(listBilling(t).text)}`}</span>
+        ${t.founder_since && founderDaysLeft(t.founder_since) <= 45 ? `<span class="t-meta"><span class="dot ${founderDaysLeft(t.founder_since) <= 0 ? 'bad' : 'warn'}"></span>${founderDaysLeft(t.founder_since) <= 0 ? 'Gründerpreis abgelaufen' : `Gründerpreis endet in ${founderDaysLeft(t.founder_since)} T.`}</span>` : ''}
         ${t.new_leads ? `<span class="t-count" title="Neue Anfragen">${t.new_leads}</span>` : ''}
       </button></li>`;
     $('#tenant-list').innerHTML =
@@ -217,8 +228,21 @@
         <div class="stat"><b>${fmtNum(convs)}</b><span>Gespräche diesen Monat</span></div>
         <div class="stat"><b>${newLeads}</b><span>Neue Anfragen</span></div>
       </div></div>
+      <div id="founder-panel"></div>
       <button class="btn btn-primary" type="button" id="welcome-new">Neuen Kunden anlegen</button>`;
     $('#welcome-new').addEventListener('click', renderNewTenant);
+    api('/founders').then((list) => {
+      if (!list.length || !$('#founder-panel')) return;
+      $('#founder-panel').innerHTML = `<div class="panel"><div class="panel-head"><h2>Gründerpreis</h2><span class="row-meta">${list.length} von 10 Plätzen vergeben</span></div>
+        <p class="hint">Einen Monat vor Ablauf geht automatisch eine Info-Mail an den Kunden (Kopie an dich). Am Ablauftag bekommst du eine Erinnerung, den Preis umzustellen.</p>
+        <div class="rows">${list.map((f) => `
+          <div class="row source-row"><div><div class="row-title">${esc(f.name)}</div>
+            <div class="row-meta"><span class="dot ${f.expired ? 'bad' : f.daysLeft <= 45 ? 'warn' : 'ok'}"></span>
+              ${f.expired ? `abgelaufen am ${esc(fmtDay(f.endsOn))} · jetzt ${f.regularEur} €` : `endet am ${esc(fmtDay(f.endsOn))} (in ${f.daysLeft} Tagen) · danach ${f.regularEur} €`}
+              · Info-Mail ${f.noticeSentAt ? `gesendet ${esc(fmtDay(f.noticeSentAt))}` : f.noticeDue ? 'fällig, geht in der nächsten Stunde raus' : `automatisch am ${esc(fmtDay(f.noticeOn))}`}</div></div>
+            <button class="btn btn-secondary" type="button" data-founder-open="${f.id}">Öffnen</button></div>`).join('')}</div></div>`;
+      $('#founder-panel').querySelectorAll('[data-founder-open]').forEach((b) => b.addEventListener('click', () => openTenant(b.dataset.founderOpen, 'abrechnung')));
+    }).catch(() => {});
   }
 
   // ------------------------------------------------------------ Neuer Kunde
@@ -817,7 +841,7 @@
 
   // --- Abrechnung: manuell (Admin), Stripe (Admin-Link oder Kunde selbst), Testphase, Verlauf
   const EVENT_LABEL = {
-    testphase: 'Testphase gestartet', testphase_abgelaufen: 'Testphase abgelaufen', bezahlt: 'Als bezahlt markiert',
+    gruenderpreis: 'Gründerpreis vergeben (12 Monate garantiert)', testphase: 'Testphase gestartet', testphase_abgelaufen: 'Testphase abgelaufen', bezahlt: 'Als bezahlt markiert',
     eingeschaltet: 'Eingeschaltet', ausgeschaltet: 'Ausgeschaltet', stripe_bezahlt: 'Abo über Stripe abgeschlossen',
     stripe_rechnung_bezahlt: 'Stripe-Rechnung bezahlt', stripe_zahlung_fehlgeschlagen: 'Stripe-Zahlung fehlgeschlagen',
     stripe_gekuendigt: 'Stripe-Abo beendet', stripe_abo_active: 'Stripe-Abo aktiv', stripe_abo_past_due: 'Stripe: Zahlung offen',
@@ -843,6 +867,12 @@
       </div>`;
 
     let html = statusPanel;
+    if (!IS_ADMIN && b.founder?.isFounder) {
+      html += `<div class="panel"><h2>Ihr Gründerpreis</h2><p>${b.founder.expired
+        ? `Ihr Gründerpreis ist am ${esc(fmtDay(b.founder.endsOn))} ausgelaufen. Es gilt der reguläre Preis von ${b.founder.regularEur} € im Monat.`
+        : `Sie zahlen <strong>${b.founder.priceEur} € im Monat</strong>, garantiert bis ${esc(fmtDay(new Date(Date.parse(b.founder.endsOn) - 864e5).toISOString().slice(0, 10)))}. Danach gilt der reguläre Preis von ${b.founder.regularEur} € im Monat.`}</p>
+        <p class="hint">Keine Mindestlaufzeit: jederzeit zum Monatsende kündbar.</p></div>`;
+    }
     if (IS_ADMIN) {
       html += `
       <div class="panel">
@@ -864,6 +894,7 @@
           <div id="s-link-out"></div>`
         : '<p class="hint">Stripe ist noch nicht eingerichtet. Tragen Sie <code>STRIPE_SECRET_KEY</code>, <code>STRIPE_WEBHOOK_SECRET</code> und die Preis-IDs in die <code>.env</code> ein (Anleitung in der README).</p>'}
       </div>
+      <div class="panel" id="founder-box"><h2>Gründerpreis</h2><p class="hint">Lade …</p></div>
       <div class="panel">
         <h2>Testphase und Ein/Aus</h2>
         <div class="copy-row" style="margin-top:10px">
@@ -899,6 +930,7 @@
     body.innerHTML = html;
 
     const after = async (promise, msg) => { await promise; toast(msg); await refreshCurrent(); renderTenant(); };
+    if (IS_ADMIN) renderFounderBox(t, after);
     $('#m-paid')?.addEventListener('click', (e) => busy(e.currentTarget, () => after(
       api(T(t) + '/billing/manual', { method: 'POST', body: { months: Number($('#m-months').value), note: $('#m-note').value.trim() || undefined } }), 'Als bezahlt markiert, Assistent ist an ✓')));
     $('#t-trial')?.addEventListener('click', (e) => busy(e.currentTarget, () => after(
@@ -919,6 +951,38 @@
       const r = await api(T(t) + '/billing/checkout', { method: 'POST', body: { plan } });
       location.href = r.url;
     }));
+  }
+
+  async function renderFounderBox(t, after) {
+    const box = $('#founder-box');
+    let f;
+    try { f = await api(T(t) + '/founder'); } catch (err) { box.innerHTML = `<h2>Gründerpreis</h2><div class="error">${esc(err.message)}</div>`; return; }
+    const today = new Date().toISOString().slice(0, 10);
+    if (!f.isFounder) {
+      box.innerHTML = `<h2>Gründerpreis</h2>
+        <p class="hint">Die ersten ${f.limit} zahlenden Kunden werden beim ersten Bezahlen automatisch markiert. Vergeben: <strong>${f.used} von ${f.limit}</strong>.</p>
+        ${f.used < f.limit ? `<div class="copy-row"><label for="f-since" class="hint" style="margin:0">Start</label><input id="f-since" type="date" value="${today}" style="width:auto">
+          <button class="btn btn-secondary" type="button" id="f-set">Als Gründerkunde markieren</button></div>` : '<p class="hint">Alle Plätze sind vergeben.</p>'}`;
+      $('#f-set')?.addEventListener('click', (e) => busy(e.currentTarget, () => after(api(T(t) + '/founder', { method: 'POST', body: { since: $('#f-since').value } }), 'Gründerpreis gesetzt ✓')));
+      return;
+    }
+    box.innerHTML = `<div class="panel-head"><h2>Gründerpreis</h2><span class="badge ${f.expired ? 'bad' : f.daysLeft <= 45 ? 'warn' : ''}">${f.expired ? 'abgelaufen' : `noch ${f.daysLeft} Tage`}</span></div>
+      <div class="stats">
+        <div class="stat"><b>${esc(fmtDay(f.since))}</b><span>Start</span></div>
+        <div class="stat"><b>${esc(fmtDay(f.endsOn))}</b><span>Ende (ab hier ${f.regularEur} €)</span></div>
+        <div class="stat"><b>${f.noticeSentAt ? esc(fmtDay(f.noticeSentAt)) : f.noticeDue ? 'fällig' : esc(fmtDay(f.noticeOn))}</b><span>${f.noticeSentAt ? 'Info-Mail gesendet' : f.noticeDue ? 'Info-Mail geht in der nächsten Stunde raus' : 'Info-Mail geht automatisch raus'}</span></div>
+      </div>
+      <p class="hint">Am Ablauftag bekommst du eine Erinnerung per Mail, den Preis umzustellen${t.billing_method === 'stripe' ? ' (bei Stripe: Preis im Abo ändern)' : ''}.</p>
+      <details style="margin:8px 0 12px"><summary>Info-Mail an den Kunden ansehen</summary>
+        <div class="mail-preview"><p class="row-meta">Betreff: <strong>${esc(f.preview.subject)}</strong></p>${f.preview.html}</div></details>
+      <div class="copy-row">
+        <button class="btn btn-secondary" type="button" id="f-send">${f.noticeSentAt ? 'Info-Mail erneut senden' : 'Info-Mail jetzt senden'}</button>
+        <input id="f-since" type="date" value="${esc(f.since)}" style="width:auto"><button class="btn btn-secondary" type="button" id="f-set">Startdatum ändern</button>
+        <span style="flex:1"></span><button class="btn btn-danger" type="button" id="f-del">Gründerpreis entfernen</button>
+      </div>`;
+    $('#f-send').addEventListener('click', (e) => { if (confirm('Info-Mail jetzt an den Kunden senden?')) busy(e.currentTarget, () => after(api(T(t) + '/founder/notice', { method: 'POST' }), 'Info-Mail gesendet ✓')); });
+    $('#f-set').addEventListener('click', (e) => busy(e.currentTarget, () => after(api(T(t) + '/founder', { method: 'POST', body: { since: $('#f-since').value } }), 'Startdatum geändert ✓')));
+    $('#f-del').addEventListener('click', (e) => { if (confirm('Gründerpreis für diesen Kunden entfernen? Der Platz wird frei.')) busy(e.currentTarget, () => after(api(T(t) + '/founder', { method: 'POST', body: { since: null } }), 'Gründerpreis entfernt')); });
   }
 
   // --- Zugänge (nur Admin): wer darf sich ins Kunden-Dashboard einloggen?

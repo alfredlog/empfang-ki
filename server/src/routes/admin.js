@@ -11,6 +11,7 @@ import { normalizeUrl } from '../services/importers.js';
 import { pool } from '../db/pool.js';
 import { PLANS, newPublicKey, normalizeOrigins } from '../services/tenants.js';
 import { listIndustries } from '../templates/industries.js';
+import { listFounders } from '../services/founder.js';
 import { buildTenantRouter, embedInfo, tenantFields } from './tenant-scope.js';
 
 export const adminRouter = Router();
@@ -48,6 +49,7 @@ function hostOf(website) {
 adminRouter.get('/me', (req, res) => res.json({ ok: true, role: 'admin', publicUrl: config.publicUrl, llm: config.llm.provider }));
 adminRouter.get('/industries', (req, res) => res.json(listIndustries()));
 adminRouter.get('/plans', (req, res) => res.json(PLANS));
+adminRouter.get('/founders', asyncRoute(async (req, res) => res.json(await listFounders())));
 
 adminRouter.get('/tenants', asyncRoute(async (req, res) => {
   const { rows } = await query(
@@ -55,7 +57,7 @@ adminRouter.get('/tenants', asyncRoute(async (req, res) => {
             coalesce(u.conversations, 0) AS conversations_month,
             (SELECT count(*)::int FROM leads l WHERE l.tenant_id = t.id AND l.status = 'neu') AS new_leads,
             (SELECT coalesce(sum(tokens), 0)::int FROM knowledge_chunks k WHERE k.tenant_id = t.id) AS knowledge_tokens,
-            t.billing_status, t.billing_method, t.paid_until, t.trial_ends_at
+            t.billing_status, t.billing_method, t.paid_until, t.trial_ends_at, t.founder_since
        FROM tenants t
        LEFT JOIN usage_monthly u ON u.tenant_id = t.id AND u.month = date_trunc('month', now())::date
       ORDER BY t.plan = 'demo', t.created_at DESC`,

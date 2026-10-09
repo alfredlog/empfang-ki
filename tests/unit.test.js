@@ -110,3 +110,22 @@ test('stripEmoji entfernt Emojis, lässt Text, Umlaute, € und © stehen', () =
   assert.equal(stripEmoji('👍🏽 Danke ❤️'), ' Danke ');
   assert.equal(stripEmoji('Größe 6 m², ab 14.900 € © Weber → Termin'), 'Größe 6 m², ab 14.900 € © Weber → Termin');
 });
+
+test('Gründerpreis: Ablaufdatum, Restlaufzeit und Info-Mail', async () => {
+  const { founderEndsOn, founderInfo, buildFounderNotice } = await import('../server/src/services/founder.js');
+  assert.equal(founderEndsOn('2026-10-15'), '2027-10-15');
+  const t = { name: 'Haustechnik Weber', plan: 'starter', founder_since: '2026-10-15' };
+  const f = founderInfo(t, '2027-09-20');
+  assert.equal(f.isFounder, true);
+  assert.equal(f.daysLeft, 25);
+  assert.equal(f.noticeDue, true);
+  assert.equal(f.noticeOn, '2027-09-15');
+  assert.equal(f.priceEur, 29);
+  assert.equal(f.regularEur, 49);
+  assert.equal(founderInfo({ founder_since: null }).isFounder, false);
+  const mail = buildFounderNotice(t);
+  assert.match(mail.subject, /endet am 15\.10\.2027/);
+  assert.match(mail.text, /29 €/);
+  assert.match(mail.text, /49 €/);
+  assert.match(mail.text, /jederzeit zum Monatsende/);
+});

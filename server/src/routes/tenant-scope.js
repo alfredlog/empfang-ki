@@ -17,6 +17,7 @@ import {
   addKnowledgeEntry, deleteChunk, deleteSource, knowledgeStats, listSources, replaceKnowledge,
 } from '../services/knowledge.js';
 import { addSlots, deleteSlot, listSlots, releaseSlot } from '../services/slots.js';
+import { FOUNDER_LIMIT, buildFounderNotice, founderCount, founderInfo, sendFounderNotice, setFounder } from '../services/founder.js';
 import { PLANS, monthlyUsage, normalizeOrigins } from '../services/tenants.js';
 import { industries } from '../templates/industries.js';
 
@@ -158,6 +159,31 @@ export function buildTenantRouter({ role }) {
       const v = z.object({ active: z.boolean(), note: z.string().max(300).optional() }).parse(req.body || {});
       if (!(await setActiveManually(req.tenantId, v.active, v.note))) return res.status(404).json({ error: 'not_found' });
       res.json(await tenantDetail(req.tenantId));
+    }));
+
+    r.get('/founder', asyncRoute(async (req, res) => {
+      const { rows } = await query('SELECT * FROM tenants WHERE id = $1', [req.tenantId]);
+      if (!rows[0]) return res.status(404).json({ error: 'not_found' });
+      const info = founderInfo(rows[0]);
+      res.json({ ...info, used: await founderCount(), limit: FOUNDER_LIMIT, preview: info.isFounder ? buildFounderNotice(rows[0]) : null });
+    }));
+
+    r.post('/founder', asyncRoute(async (req, res) => {
+      const { since } = z.object({ since: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable() }).parse(req.body || {});
+      const { rows } = await query('SELECT founder_since FROM tenants WHERE id = $1', [req.tenantId]);
+      if (!rows[0]) return res.status(404).json({ error: 'not_found' });
+      if (since && !rows[0].founder_since && (await founderCount()) >= FOUNDER_LIMIT) {
+        return res.status(409).json({ error: 'limit', message: `Alle ${FOUNDER_LIMIT} Gründerplätze sind vergeben.` });
+      }
+      await setFounder(req.tenantId, since);
+      res.json(await tenantDetail(req.tenantId));
+    }));
+
+    r.post('/founder/notice', asyncRoute(async (req, res) => {
+      const r2 = await sendFounderNotice(req.tenantId, { force: true });
+      if (r2.skipped === 'no_recipients') return res.status(400).json({ error: 'no_recipients', message: 'Keine Kontakt-E-Mail hinterlegt (Einstellungen) und keine Zugänge angelegt.' });
+      if (r2.skipped) return res.status(400).json({ error: r2.skipped, message: 'Kein Gründerkunde.' });
+      res.json(r2);
     }));
 
     r.post('/billing/trial', asyncRoute(async (req, res) => {

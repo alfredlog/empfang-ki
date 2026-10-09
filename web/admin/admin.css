@@ -198,3 +198,4 @@ code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; b
 /* Termine */
 .grid-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px 16px; align-items: end; }
 .grid-form .field { margin: 0; }
+.mail-preview { border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; margin-top: 10px; background: var(--white); }
