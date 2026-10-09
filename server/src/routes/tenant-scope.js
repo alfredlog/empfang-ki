@@ -64,7 +64,7 @@ export async function tenantDetail(tenantId) {
     query(`SELECT count(*)::int AS n FROM leads WHERE tenant_id = $1 AND status = 'neu'`, [t.id]),
   ]);
   return {
-    ...t, ...embedInfo(t), knowledge, usage, sources, newLeads: leads.rows[0].n, planInfo: PLANS[t.plan] || null, billing: billingSummary(t),
+    ...t, ...embedInfo(t), knowledge, usage, sources, newLeads: leads.rows[0].n, planInfo: PLANS[t.plan] || null, billing: billingSummary(t, { foundersFull: (await founderCount()) >= FOUNDER_LIMIT }),
   };
 }
 

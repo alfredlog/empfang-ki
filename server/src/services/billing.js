@@ -5,7 +5,7 @@
 import Stripe from 'stripe';
 import { config } from '../config.js';
 import { query, withTransaction } from '../db/pool.js';
-import { autoAssignFounder, founderInfo } from './founder.js';
+import { FOUNDER_LIMIT, autoAssignFounder, founderCount, founderInfo } from './founder.js';
 import { PLANS } from './tenants.js';
 
 let stripeClient;
@@ -22,8 +22,13 @@ export function stripe() {
 export const stripeEnabled = () => Boolean(config.stripe.secretKey);
 
 const PAID_PLANS = ['starter', 'business', 'pro'];
-const priceFor = (plan) => config.stripe.prices[plan];
-const planForPrice = (priceId) => PAID_PLANS.find((p) => config.stripe.prices[p] && config.stripe.prices[p] === priceId) || null;
+const planForPrice = (priceId) => PAID_PLANS.find((p) => priceId && (config.stripe.prices[p] === priceId || config.stripe.regularPrices[p] === priceId)) || null;
+
+/** Gründerpreis, solange Plätze frei sind bzw. der Kunde Gründerkunde mit laufender Garantie ist – sonst regulärer Preis. */
+export async function useRegularPrice(tenant) {
+  if (tenant.founder_since) return founderInfo(tenant).expired;
+  return (await founderCount()) >= FOUNDER_LIMIT;
+}
 
 export async function logBillingEvent(db, { tenantId, source, type, detail = {}, stripeEventId = null }) {
   const { rowCount } = await db.query(
@@ -43,8 +48,9 @@ export async function billingEvents(tenantId) {
 }
 
 /** Status für die Oberfläche (Admin und Kunde). */
-export function billingSummary(t) {
+export function billingSummary(t, { foundersFull = false } = {}) {
   const founder = founderInfo(t);
+  const regular = founder.isFounder ? founder.expired : foundersFull;
   const plan = PLANS[t.plan] || null;
   const today = new Date().toISOString().slice(0, 10);
   const paidUntil = t.paid_until ? String(t.paid_until).slice(0, 10) : null;
@@ -53,7 +59,8 @@ export function billingSummary(t) {
     method: t.billing_method,
     active: t.active,
     plan: t.plan,
-    priceEur: plan?.priceEur ?? null,
+    priceEur: plan ? (regular ? (plan.regularEur ?? plan.priceEur) : plan.priceEur) : null,
+    regularPrice: regular,
     trialEndsAt: t.trial_ends_at,
     paidUntil,
     overdue: t.billing_method === 'manual' && paidUntil !== null && paidUntil < today,
@@ -132,9 +139,11 @@ export async function expireTrials() {
 /** Zahlungsseite (Stripe Checkout) für ein Monatsabo erstellen. */
 export async function createCheckout(tenant, { plan, returnPath, email }) {
   const chosen = PAID_PLANS.includes(plan) ? plan : (PAID_PLANS.includes(tenant.plan) ? tenant.plan : 'starter');
-  const price = priceFor(chosen);
+  const regular = await useRegularPrice(tenant);
+  const price = regular ? config.stripe.regularPrices[chosen] : config.stripe.prices[chosen];
   if (!price) {
-    const err = new Error(`Für das Paket „${chosen}“ ist keine Stripe-Preis-ID hinterlegt (STRIPE_PRICE_${chosen.toUpperCase()}).`);
+    const name = `STRIPE_PRICE_${chosen.toUpperCase()}${regular ? '_REGULAR' : ''}`;
+    const err = new Error(`Für das Paket „${chosen}“ ist keine Stripe-Preis-ID hinterlegt (${name} in der .env).`);
     err.status = 400;
     throw err;
   }
@@ -153,7 +162,7 @@ export async function createCheckout(tenant, { plan, returnPath, email }) {
     success_url: `${back}${back.includes('?') ? '&' : '?'}bezahlt=1`,
     cancel_url: back,
   });
-  return { url: session.url, plan: chosen };
+  return { url: session.url, plan: chosen, regular };
 }
 
 /** Stripe-Kundenportal (Zahlungsmethode, Rechnungen, Kündigung). */

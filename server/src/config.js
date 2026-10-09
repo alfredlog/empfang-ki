@@ -52,6 +52,12 @@ export const config = {
       business: env.STRIPE_PRICE_BUSINESS || '',
       pro: env.STRIPE_PRICE_PRO || '',
     },
+    // Reguläre Preise (nach den 10 Gründerkunden bzw. nach Ablauf der 12 Monate)
+    regularPrices: {
+      starter: env.STRIPE_PRICE_STARTER_REGULAR || '',
+      business: env.STRIPE_PRICE_BUSINESS_REGULAR || '',
+      pro: env.STRIPE_PRICE_PRO_REGULAR || '',
+    },
   },
 
   mail: {

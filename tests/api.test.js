@@ -431,3 +431,11 @@ test('Gründerpreis: beim ersten Bezahlen automatisch vergeben, im Admin änderb
   f = await (await fetch(`${T}/founder`, { headers: admin })).json();
   assert.equal(f.isFounder, false);
 });
+
+test('Stripe-Preis: Gründerpreis während der 12 Monate, danach regulär', opts, async () => {
+  const { useRegularPrice } = await import('../server/src/services/billing.js');
+  const recent = new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10);
+  const old = new Date(Date.now() - 400 * 864e5).toISOString().slice(0, 10);
+  assert.equal(await useRegularPrice({ founder_since: recent, plan: 'starter' }), false);
+  assert.equal(await useRegularPrice({ founder_since: old, plan: 'starter' }), true);
+});

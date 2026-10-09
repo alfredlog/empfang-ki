@@ -917,7 +917,7 @@
         html += `<div class="panel"><h2>Abo abschließen</h2><p class="hint">Monatlich kündbar. Die Zahlung läuft sicher über Stripe (Karte, SEPA-Lastschrift u. a.). Ihr Assistent wird direkt nach der Zahlung eingeschaltet.</p>
           <div class="plans-pick">${paidPlans.map((k) => `
             <label class="plan-pick"><input type="radio" name="plan-pick" value="${k}" ${k === (paidPlans.includes(b.plan) ? b.plan : 'starter') ? 'checked' : ''}>
-              <span><strong>${esc(state.plans[k].label)}</strong><span class="price-sm">${state.plans[k].priceEur} € / Monat</span><span class="hint">bis ${fmtNum(state.plans[k].monthlyConversations)} Gespräche</span></span></label>`).join('')}</div>
+              <span><strong>${esc(state.plans[k].label)}</strong><span class="price-sm">${b.regularPrice ? state.plans[k].regularEur : state.plans[k].priceEur} € / Monat</span><span class="hint">bis ${fmtNum(state.plans[k].monthlyConversations)} Gespräche</span></span></label>`).join('')}</div>
           <button class="btn btn-primary" type="button" id="s-subscribe" style="margin-top:14px">Weiter zur Zahlung</button></div>`;
       } else {
         html += `<div class="panel"><h2>Abo abschließen</h2><p>Für ein Abo schreiben Sie uns bitte an <a href="mailto:support@empfang-ki.de">support@empfang-ki.de</a>.</p></div>`;
