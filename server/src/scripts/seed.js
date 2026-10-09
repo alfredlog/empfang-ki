@@ -33,7 +33,7 @@ Gründerpreise für die ersten zehn Betriebe aus der Region, garantiert für zw�
 Starter: 29 € pro Monat (nach 12 Monaten 49 €), bis 200 Gespräche.
 Business: 59 € pro Monat (nach 12 Monaten 99 €), bis 600 Gespräche.
 Pro: 99 € pro Monat (nach 12 Monaten 179 €), bis 1.500 Gespräche.
-Neue Kunden können den Assistenten 14 Tage kostenlos testen. Monatlich kündbar.
+Neue Kunden können den Assistenten 14 Tage kostenlos testen. Keine Mindestlaufzeit: jederzeit zum Monatsende kündbar, auch während der zwölf Monate Gründerpreis. Die Preisgarantie gilt nur für uns, nicht als Bindung für den Kunden.
 
 # Einbau
 Der Betrieb gibt seine Infos (Website, Preisliste, Stichpunkte). Danach wird eine Zeile Code in die Website eingefügt; das funktioniert mit WordPress, Jimdo, Wix und allen anderen Websites. Die Einrichtung übernehmen wir auf Wunsch. Betriebe ohne Website bekommen eine eigene Chat-Seite mit Link und QR-Code.
