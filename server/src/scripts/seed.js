@@ -29,10 +29,10 @@ Handwerk, Hausverwaltungen, Kosmetik- und Friseurstudios, Autovermietungen und W
 
 # Preise
 Alle Pakete enthalten alle Funktionen (Antworten aus Website/PDFs, Anfragen per E-Mail und im Dashboard, offene Fragen, Online-Terminbuchung über freie Termine, Wissen selbst ändern, eigene Farben und Begrüßung, Einbau auf mehreren Websites, eigene Chat-Seite, Einrichtung durch uns). Die Pakete unterscheiden sich nur in der Anzahl der Gespräche pro Monat.
-Gründerpreise für die ersten zehn Betriebe aus der Region, garantiert für zwölf Monate, ohne Einrichtungsgebühr:
-Starter: 29 € pro Monat (später 49 €), bis 200 Gespräche.
-Business: 59 € pro Monat (später 99 €), bis 600 Gespräche.
-Pro: 99 € pro Monat (später 179 €), bis 1.500 Gespräche.
+Gründerpreise für die ersten zehn Betriebe aus der Region, garantiert für zwölf Monate ab Vertragsbeginn, ohne Einrichtungsgebühr. Danach gilt der reguläre Preis; der Betrieb wird einen Monat vorher per E-Mail informiert und kann monatlich kündigen:
+Starter: 29 € pro Monat (nach 12 Monaten 49 €), bis 200 Gespräche.
+Business: 59 € pro Monat (nach 12 Monaten 99 €), bis 600 Gespräche.
+Pro: 99 € pro Monat (nach 12 Monaten 179 €), bis 1.500 Gespräche.
 Neue Kunden können den Assistenten 14 Tage kostenlos testen. Monatlich kündbar.
 
 # Einbau

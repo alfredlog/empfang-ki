@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { query } from '../db/pool.js';
 import { getIndustry } from '../templates/industries.js';
 
-// Gründerpreise für die ersten Kunden (später: 49 / 99 / 179 €)
+// Gründerpreise für die ersten zehn Kunden, 12 Monate ab Vertragsbeginn garantiert (danach: 49 / 99 / 179 €)
 export const PLANS = {
   starter: { label: 'Starter', priceEur: 29, monthlyConversations: 200 },
   business: { label: 'Business', priceEur: 59, monthlyConversations: 600 },
