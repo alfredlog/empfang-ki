@@ -1,0 +1,320 @@
+{
+  "beschreibung": "Testfragen für die Wissenssuche. 'erwartet' = Titel des Abschnitts (oder der Abschnitte), in dem die Antwort steht. Kategorien: stichwort = gleiche Wörter wie im Text; umschreibung = gleiche Bedeutung, andere Wörter; exakt = Name, Zahl oder Fachbegriff; englisch = Frage auf Englisch; code = Gerätetyp, Modell- oder Telefonnummer (nach dem ersten Durchlauf ergänzt, um die bekannte Schwäche von Embeddings bei Codes gezielt zu testen).",
+  "fragen": [
+    {
+      "kategorie": "stichwort",
+      "frage": "Was kostet die Wartung einer Gastherme?",
+      "erwartet": [
+        "Heizungswartung"
+      ]
+    },
+    {
+      "kategorie": "stichwort",
+      "frage": "Wie lange dauert eine Badsanierung?",
+      "erwartet": [
+        "Badsanierung"
+      ]
+    },
+    {
+      "kategorie": "stichwort",
+      "frage": "Bietet ihr einen Wartungsvertrag an?",
+      "erwartet": [
+        "Wartungsvertrag"
+      ]
+    },
+    {
+      "kategorie": "stichwort",
+      "frage": "Welche Zahlungsarten akzeptiert ihr?",
+      "erwartet": [
+        "Zahlungsarten"
+      ]
+    },
+    {
+      "kategorie": "stichwort",
+      "frage": "Macht ihr auch eine Legionellenprüfung?",
+      "erwartet": [
+        "Legionellenprüfung"
+      ]
+    },
+    {
+      "kategorie": "stichwort",
+      "frage": "Wie hoch ist die Förderung für eine Wärmepumpe?",
+      "erwartet": [
+        "Förderung Heizungstausch"
+      ]
+    },
+    {
+      "kategorie": "stichwort",
+      "frage": "Was kostet eine Kamerainspektion?",
+      "erwartet": [
+        "Rohrreinigung und Kamerainspektion"
+      ]
+    },
+    {
+      "kategorie": "stichwort",
+      "frage": "Montiert ihr Klimaanlagen?",
+      "erwartet": [
+        "Klimaanlagen"
+      ]
+    },
+    {
+      "kategorie": "stichwort",
+      "frage": "Was kostet eine Leckageortung?",
+      "erwartet": [
+        "Leckageortung"
+      ]
+    },
+    {
+      "kategorie": "stichwort",
+      "frage": "Wie hoch ist der Notdienstzuschlag?",
+      "erwartet": [
+        "Notdienst"
+      ]
+    },
+    {
+      "kategorie": "stichwort",
+      "frage": "Kann ich einen Termin kostenlos absagen?",
+      "erwartet": [
+        "Terminabsage"
+      ]
+    },
+    {
+      "kategorie": "stichwort",
+      "frage": "Bildet ihr Anlagenmechaniker aus?",
+      "erwartet": [
+        "Ausbildung und Karriere"
+      ]
+    },
+    {
+      "kategorie": "umschreibung",
+      "frage": "Zu welchen Uhrzeiten ist bei euch jemand da?",
+      "erwartet": [
+        "Öffnungszeiten Büro"
+      ]
+    },
+    {
+      "kategorie": "umschreibung",
+      "frage": "Die Heizung im Wohnzimmer blubbert und wird nur unten warm.",
+      "erwartet": [
+        "Heizkörper entlüften"
+      ]
+    },
+    {
+      "kategorie": "umschreibung",
+      "frage": "Bei mir spritzt Wasser aus der Wand, was mache ich zuerst?",
+      "erwartet": [
+        "Rohrbruch und Wasserschaden"
+      ]
+    },
+    {
+      "kategorie": "umschreibung",
+      "frage": "Das Spülbecken in der Küche läuft nicht mehr ab, alles bleibt stehen.",
+      "erwartet": [
+        "Verstopfter Abfluss"
+      ]
+    },
+    {
+      "kategorie": "umschreibung",
+      "frage": "Meine Mutter sitzt im Rollstuhl und kommt nicht mehr in die Badewanne – was könnt ihr machen?",
+      "erwartet": [
+        "Barrierefreies Bad"
+      ]
+    },
+    {
+      "kategorie": "umschreibung",
+      "frage": "Gibt es Geld vom Staat, wenn ich meine alte Ölheizung ersetze?",
+      "erwartet": [
+        "Förderung Heizungstausch"
+      ]
+    },
+    {
+      "kategorie": "umschreibung",
+      "frage": "Ist das Leitungswasser hier sehr kalkhaltig?",
+      "erwartet": [
+        "Enthärtungsanlage"
+      ]
+    },
+    {
+      "kategorie": "umschreibung",
+      "frage": "Fahrt ihr auch zu Kunden in Nachbarorten?",
+      "erwartet": [
+        "Einzugsgebiet"
+      ]
+    },
+    {
+      "kategorie": "umschreibung",
+      "frage": "Wie viel verlangt ihr pro Stunde?",
+      "erwartet": [
+        "Anfahrtskosten und Stundensätze"
+      ]
+    },
+    {
+      "kategorie": "umschreibung",
+      "frage": "Was passiert, wenn nach eurer Arbeit nach einem Jahr etwas kaputtgeht?",
+      "erwartet": [
+        "Garantie und Gewährleistung"
+      ]
+    },
+    {
+      "kategorie": "umschreibung",
+      "frage": "Ich vermiete ein Haus mit sechs Parteien – welche Pflichten habe ich beim Wasser aus dem Hahn?",
+      "erwartet": [
+        "Legionellenprüfung"
+      ]
+    },
+    {
+      "kategorie": "umschreibung",
+      "frage": "Es riecht im Keller nach Gas und es ist Sonntagnacht. Wen rufe ich an?",
+      "erwartet": [
+        "Notdienst"
+      ]
+    },
+    {
+      "kategorie": "umschreibung",
+      "frage": "Ist mein altes Haus für eine Heizung mit Umweltwärme geeignet?",
+      "erwartet": [
+        "Wärmepumpen"
+      ]
+    },
+    {
+      "kategorie": "umschreibung",
+      "frage": "Was kostet es, wenn ihr erst vorbeikommt und euch alles anschaut, bevor ich mich entscheide?",
+      "erwartet": [
+        "Kostenvoranschlag"
+      ]
+    },
+    {
+      "kategorie": "exakt",
+      "frage": "Was ist eure Notdienstnummer?",
+      "erwartet": [
+        "Notdienst"
+      ]
+    },
+    {
+      "kategorie": "exakt",
+      "frage": "Kommt ihr auch nach Griesheim?",
+      "erwartet": [
+        "Einzugsgebiet"
+      ]
+    },
+    {
+      "kategorie": "exakt",
+      "frage": "Verbaut ihr Wärmepumpen von Vaillant?",
+      "erwartet": [
+        "Wärmepumpen"
+      ]
+    },
+    {
+      "kategorie": "exakt",
+      "frage": "Wie viel bar Druck sollte meine Heizung haben?",
+      "erwartet": [
+        "Wasserdruck der Heizung"
+      ]
+    },
+    {
+      "kategorie": "exakt",
+      "frage": "Habt ihr eine Zertifizierung nach F-Gase-Verordnung?",
+      "erwartet": [
+        "Klimaanlagen"
+      ]
+    },
+    {
+      "kategorie": "exakt",
+      "frage": "Ist euer Betrieb in der Pfungstädter Straße?",
+      "erwartet": [
+        "Kontakt und Anfahrt"
+      ]
+    },
+    {
+      "kategorie": "exakt",
+      "frage": "Wie viel zahlt die Pflegekasse dazu?",
+      "erwartet": [
+        "Barrierefreies Bad"
+      ]
+    },
+    {
+      "kategorie": "exakt",
+      "frage": "Was sagt das Gebäudeenergiegesetz zu neuen Gasheizungen?",
+      "erwartet": [
+        "Gasheizung und Brennwerttechnik"
+      ]
+    },
+    {
+      "kategorie": "englisch",
+      "frage": "When is your office open?",
+      "erwartet": [
+        "Öffnungszeiten Büro"
+      ]
+    },
+    {
+      "kategorie": "englisch",
+      "frage": "A pipe burst in my flat, what should I do first?",
+      "erwartet": [
+        "Rohrbruch und Wasserschaden"
+      ]
+    },
+    {
+      "kategorie": "englisch",
+      "frage": "How much does servicing a heat pump cost?",
+      "erwartet": [
+        "Heizungswartung"
+      ]
+    },
+    {
+      "kategorie": "englisch",
+      "frage": "Do you install air conditioning?",
+      "erwartet": [
+        "Klimaanlagen"
+      ]
+    },
+    {
+      "kategorie": "englisch",
+      "frage": "Are you hiring?",
+      "erwartet": [
+        "Ausbildung und Karriere"
+      ]
+    },
+    {
+      "kategorie": "englisch",
+      "frage": "Can I pay by credit card?",
+      "erwartet": [
+        "Zahlungsarten"
+      ]
+    },
+    {
+      "kategorie": "code",
+      "frage": "Habt ihr Teile für die VC 206/5-5?",
+      "erwartet": [
+        "Ersatzteile und Gerätetypen"
+      ]
+    },
+    {
+      "kategorie": "code",
+      "frage": "Ist ein Heizelement für den DHB-E 18 LCD da?",
+      "erwartet": [
+        "Ersatzteile und Gerätetypen"
+      ]
+    },
+    {
+      "kategorie": "code",
+      "frage": "B2HF zeigt eine Störung – habt ihr Ersatzteile?",
+      "erwartet": [
+        "Ersatzteile und Gerätetypen"
+      ]
+    },
+    {
+      "kategorie": "code",
+      "frage": "Wofür ist die Nummer 06151 594 299?",
+      "erwartet": [
+        "Notdienst"
+      ]
+    },
+    {
+      "kategorie": "code",
+      "frage": "Ist 06151 594 200 eure normale Telefonnummer?",
+      "erwartet": [
+        "Kontakt und Anfahrt"
+      ]
+    }
+  ]
+}

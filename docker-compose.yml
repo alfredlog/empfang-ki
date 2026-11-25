@@ -27,6 +27,10 @@ services:
         condition: service_healthy
     ports:
       - "127.0.0.1:3010:3000"
+    volumes:
+      # Embedding-Modell der semantischen Suche (einmal herunterladen, dann behalten)
+      - model-cache:/app/.cache/models
 
 volumes:
   db-data:
+  model-cache:

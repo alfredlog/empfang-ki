@@ -8,7 +8,7 @@ Live-Demo: **https://empfang-ki.de**
 
 - **Einbettbares Widget**: eine Zeile `<script>` in jede Website (WordPress, Jimdo, Wix …). Shadow DOM, keine CSS-Konflikte, Streaming-Antworten, mobil im Vollbild, barrierearm.
 - **Mandantenfähig**: ein Server, beliebig viele Betriebe. Jeder Betrieb hat einen Public Key (`data-bot-id`) und eine Liste erlaubter Domains.
-- **Antworten nur aus der Wissensbasis**: Kleine Wissensbasen kommen komplett in den Prompt (mit Prompt-Caching), große werden per deutscher Volltextsuche (Postgres `tsvector`) gefiltert.
+- **Antworten nur aus der Wissensbasis**: Kleine Wissensbasen kommen komplett in den Prompt (mit Prompt-Caching), große werden per **hybrider Suche** gefiltert: deutsche Volltextsuche (Postgres `tsvector`) + semantische Suche mit mehrsprachigen Embeddings, zusammengeführt per Reciprocal Rank Fusion (siehe [Wissenssuche](#wissenssuche-hybrid)).
 - **Anfragen per Tool-Use**: Claude ruft `anfrage_erstellen` auf, sobald Name, Kontakt und Anliegen bestätigt sind. Die Anfrage wird gespeichert und per E-Mail an den Betrieb geschickt.
 - **Offene Fragen und Wissenslücken**: Kann der Assistent etwas nicht beantworten, nimmt er die Kontaktdaten auf und speichert die unbeantwortete Frage. Der Betrieb ruft zurück und kann die Antwort ergänzen.
 - **Branchen-Vorlagen**: Aufgaben, Grenzen und Ton pro Branche, z. B. keine medizinische oder rechtliche Beratung, Notfall-Hinweise (112, 116 117) per deterministischer Erkennung vor dem LLM.
@@ -55,6 +55,26 @@ widget/widget.js            Einbettbares Chat-Widget
 web/                        Landing-Page, Admin-Oberfläche, Demo-Websites, gehostete Chat-Seite
 tests/                      Unit- und Integrationstests (node:test)
 ```
+
+## Wissenssuche (hybrid)
+
+Bei großen Wissensbasen (über `KNOWLEDGE_FULL_CONTEXT_TOKENS`) sucht die App die passendsten Abschnitte zur Frage:
+
+1. **Semantische Suche:** Frage und Abschnitte werden mit dem mehrsprachigen Modell `multilingual-e5-small` in Vektoren (384 Zahlen) umgewandelt; gesucht wird per Kosinus-Ähnlichkeit. Findet auch Umschreibungen („Wann habt ihr auf?“ → Öffnungszeiten) und englische Fragen. Das Modell läuft **lokal auf der CPU** – keine Kundendaten an Dritte.
+2. **Volltextsuche (streng):** Postgres `tsvector` (deutsch), alle Suchwörter müssen vorkommen – greift bei exakten Begriffen, Modell- und Telefonnummern.
+3. **Reciprocal Rank Fusion:** beide Ranglisten werden über die Ränge zusammengeführt (`1 / (60 + Rang)`).
+
+Die Embeddings werden beim Speichern berechnet und als `real[]` in Postgres gespeichert; die Suche ist exakt (bei kleinen Betrieben wenige Millisekunden). Fehlende Embeddings (z. B. nach dem Update) berechnet die App beim Start automatisch nach. Ist das Modell nicht verfügbar, läuft automatisch nur die Volltextsuche.
+
+**Evaluation:** `npm run eval:retrieval` vergleicht die Methoden an 45 Testfragen (fiktiver Sanitärbetrieb) und schreibt [`eval/retrieval/RESULTS.md`](eval/retrieval/RESULTS.md):
+
+| Methode | Hit@1 | Recall@3 | MRR@5 |
+|---|---|---|---|
+| Volltext (ODER) | 62 % | 67 % | 0,64 |
+| Semantisch | 91 % | 100 % | 0,96 |
+| Hybrid (RRF) | 91 % | 100 % | 0,96 |
+
+Erkenntnisse: Die Volltextsuche allein scheitert an Umschreibungen (36 %) und englischen Fragen (0 %). Eine erste Hybrid-Version mit ODER-Volltextsuche war *schlechter* als die semantische Suche allein (erster Lauf mit 40 Fragen: Hit@1 85 % statt 93 %), weil die breite Suche Rauschen in die Fusion brachte – deshalb nutzt die Hybrid-Suche jetzt die strenge UND-Volltextsuche. Auf diesem kleinen Datensatz ist Hybrid gleichauf mit der semantischen Suche; sie bleibt als Absicherung für große Wissensbasen mit vielen Codes und Nummern. Die Zahlen stammen aus einem selbst erstellten, kleinen Testset und zeigen Tendenzen.
 
 ## Lokal starten
 
