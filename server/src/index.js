@@ -8,8 +8,20 @@ import { purgeOldConversations } from './services/chat.js';
 import { purgeOldSlots } from './services/slots.js';
 import { runFounderJobs } from './services/founder.js';
 import { runMonthlyReports } from './services/insights.js';
+import { embeddingsEnabled, warmupEmbeddings } from './services/embeddings.js';
+import { embedMissingChunks } from './services/knowledge.js';
 
 await migrate();
+
+// Embedding-Modell im Hintergrund laden und fehlende Embeddings nachberechnen
+// (z. B. nach dem Update auf die hybride Suche). Blockiert den Start nicht.
+if (embeddingsEnabled()) {
+  (async () => {
+    await warmupEmbeddings();
+    const n = await embedMissingChunks();
+    if (n) console.log(`[embeddings] ${n} Wissensabschnitte nachberechnet`);
+  })().catch((err) => console.error('[embeddings]', err.message));
+}
 
 const app = createApp();
 const server = app.listen(config.port, () => {

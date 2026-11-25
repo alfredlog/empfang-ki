@@ -20,10 +20,29 @@ export const config = {
   },
 
   // Kleine Wissensbasen (bis zu diesem Token-Budget) werden komplett in den
-  // Prompt gelegt (mit Prompt-Caching). Größere werden per Volltextsuche gefiltert.
+  // Prompt gelegt (mit Prompt-Caching). Größere werden per hybrider Suche gefiltert:
+  // Volltextsuche + semantische Suche (Embeddings), zusammengeführt per Reciprocal Rank Fusion.
   knowledge: {
     fullContextTokenBudget: int(env.KNOWLEDGE_FULL_CONTEXT_TOKENS, 24000),
     topK: int(env.KNOWLEDGE_TOP_K, 8),
+    // Wie viele Kandidaten jede Suchmethode vor der Fusion liefert
+    candidateK: int(env.KNOWLEDGE_CANDIDATE_K, 20),
+    // Konstante k der Reciprocal Rank Fusion (60 ist der übliche Standardwert)
+    rrfK: int(env.KNOWLEDGE_RRF_K, 60),
+  },
+
+  // Embeddings für die semantische Suche. Läuft lokal auf der CPU (keine Daten an Dritte).
+  embeddings: {
+    // "local" = Modell lokal ausführen, "none" = aus (nur Volltextsuche), "mock" = für Tests
+    provider: env.EMBEDDINGS_PROVIDER || 'local',
+    // Mehrsprachiges Modell (Deutsch, Englisch, Französisch …), 384 Dimensionen
+    model: env.EMBEDDINGS_MODEL || 'Xenova/multilingual-e5-small',
+    // q8 = quantisierte Version: ca. 4x kleiner und schneller, kaum schlechter
+    dtype: env.EMBEDDINGS_DTYPE || 'q8',
+    // Ordner, in dem das heruntergeladene Modell bleibt (Docker: eigenes Volume)
+    cacheDir: env.EMBEDDINGS_CACHE_DIR || '',
+    // Optional: Modell aus einem lokalen Ordner laden, ohne Internet
+    localModelPath: env.EMBEDDINGS_LOCAL_MODEL_PATH || '',
   },
 
   chat: {

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 
 process.env.LLM_PROVIDER = 'mock';
+process.env.EMBEDDINGS_PROVIDER = 'mock';
 process.env.ADMIN_TOKEN = 'test-admin-token';
 process.env.STRIPE_SECRET_KEY = 'sk_test_dummy';
 process.env.STRIPE_WEBHOOK_SECRET = 'whsec_test_secret';
